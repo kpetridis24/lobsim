@@ -3,8 +3,8 @@
 #include "types.hpp"
 
 #include <cstdint>
-#include <deque>
 #include <iostream>
+#include <list>
 #include <optional>
 #include <queue>
 #include <tuple>
@@ -67,8 +67,20 @@ public:
 
 private:
     using OrderTraderQuantityTriplet = std::tuple<std::int64_t, std::int64_t, std::int64_t>;
-    using OrderPriorityQueue = std::deque<OrderTraderQuantityTriplet>;
+    using OrderPriorityQueue = std::list<OrderTraderQuantityTriplet>;
     using Book = std::unordered_map<std::int64_t, OrderPriorityQueue>;
+
+    void onAdd(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+               std::int64_t traderId, UpdateSource updateSource);
+    void onCancel();
+    void onDelete();
+    void onMatch();
+    void onSet();
+    std::int64_t paperWalkCross(Side aggressorSide, std::int64_t limitPriceTicks, std::int64_t qtyLots,
+                                std::int64_t takerOrderId, std::int64_t takerTraderId);
+
+    std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
+                                                  std::priority_queue<std::int64_t>& oppositeHeap);
 
     // PriceTicks -> FIFO queue of orders sitting on that tick
     Book bids;
@@ -76,4 +88,7 @@ private:
     // Convention is to maintain both as max heaps. Asks must be inserted with the sign reversed
     std::priority_queue<std::int64_t> bidsHeap;
     std::priority_queue<std::int64_t> asksHeap;
+    // For O(1) lookup based on orderId (for example for order cancel)
+    // For this purpose, we store orderId -> {side, priceTicks, location in queue}
+    std::unordered_map<std::int64_t, std::tuple<Side, std::int64_t, OrderPriorityQueue::iterator>> orderInfo;
 };
