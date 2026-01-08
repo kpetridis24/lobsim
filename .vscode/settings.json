@@ -1,0 +1,11 @@
+{
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.generator": "Ninja",
+  "cmake.configureSettings": {
+    "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+    "SIMEX_BUILD_PYTHON": "OFF"
+  },
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+}
