@@ -183,9 +183,6 @@ PaperTradingSimulatorCore::bestOppositePrice(bool oppositeIsAsk, const Book& opp
 void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
                                          std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
 
-void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
-
 void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
                                          std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
 
