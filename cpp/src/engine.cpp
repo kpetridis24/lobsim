@@ -84,9 +84,47 @@ std::optional<std::int64_t> PaperTradingSimulatorCore::depthAt(Side side, std::i
         return std::nullopt;
     }
 
-    const std::deque<OrderTraderQuantityTriplet> priorityQueue = it->second;
-    std::int64_t totalLiquidity =
-        std::accumulate(priorityQueue.begin(), priorityQueue.end(), 0,
-                        [&](int acc, const OrderTraderQuantityTriplet& triplet) { return acc + std::get<2>(triplet); });
+    const std::deque<OrderTraderQuantityTriplet>& priorityQueue = it->second;
+    std::int64_t totalLiquidity = std::accumulate(priorityQueue.begin(), priorityQueue.end(), std::int64_t{0},
+                                                  [](std::int64_t acc, const OrderTraderQuantityTriplet& triplet)
+                                                  { return acc + std::get<2>(triplet); });
     return totalLiquidity;
+}
+
+std::vector<std::pair<std::int64_t, std::int64_t>> PaperTradingSimulatorCore::l2TopN(Side side, std::uint32_t n) const
+{
+    bool isBid = side == Side::BUY;
+    auto& book = isBid ? bids : asks;
+    if (book.empty())
+    {
+        return {};
+    }
+    int numItems = static_cast<int>(book.size());
+    std::vector<std::pair<std::int64_t, std::int64_t>> pvs;
+    pvs.reserve(numItems);
+
+    std::transform(book.begin(), book.end(), std::back_inserter(pvs),
+                   [](const auto& p)
+                   {
+                       std::int64_t price = p.first;
+                       const std::deque<OrderTraderQuantityTriplet>& priorityQueue = p.second;
+                       std::int64_t totalLiquidity =
+                           std::accumulate(priorityQueue.begin(), priorityQueue.end(), std::int64_t{0},
+                                           [](std::int64_t acc, const OrderTraderQuantityTriplet& triplet)
+                                           { return acc + std::get<2>(triplet); });
+                       return std::make_pair(price, totalLiquidity);
+                   });
+
+    if (side == Side::BUY)
+    {
+        std::sort(pvs.begin(), pvs.end(), std::greater<>());
+    }
+    else
+    {
+        std::sort(pvs.begin(), pvs.end());
+    }
+
+    const std::size_t limit = std::min<std::size_t>(n, pvs.size());
+    pvs.resize(limit);
+    return pvs;
 }
