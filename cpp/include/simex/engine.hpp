@@ -18,8 +18,7 @@ constexpr std::int64_t NoAggressorNeededSentinel = -2;
 
 using SidePriceQuantityTicksTriplet = std::tuple<std::int8_t, std::int64_t, std::int64_t>;
 
-class IMatchingEngine
-{
+class IMatchingEngine {
 public:
     IMatchingEngine() = default;
     virtual ~IMatchingEngine() = default;
@@ -38,14 +37,12 @@ public:
                                     std::vector<std::int64_t>& traderIds) = 0;
 };
 
-class PaperTradingSimulatorCore final : public IMatchingEngine
-{
+class PaperTradingSimulatorCore final : public IMatchingEngine {
 public:
     PaperTradingSimulatorCore() : IMatchingEngine() {}
     PaperTradingSimulatorCore(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
                               std::vector<std::int64_t>& quantities)
-        : IMatchingEngine()
-    {
+        : IMatchingEngine() {
         initFromL2Snapshot(sides, prices, quantities);
     }
     ~PaperTradingSimulatorCore() = default;
@@ -72,12 +69,14 @@ private:
 
     void onAdd(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
                std::int64_t traderId, UpdateSource updateSource);
-    void onCancel();
-    void onDelete();
-    void onMatch();
-    void onSet();
-    std::int64_t paperWalkCross(Side aggressorSide, std::int64_t limitPriceTicks, std::int64_t qtyLots,
-                                std::int64_t takerOrderId, std::int64_t takerTraderId);
+    void onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                  std::int64_t traderId, UpdateSource updateSource);
+    void onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                  std::int64_t traderId, UpdateSource updateSource);
+    void onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                 std::int64_t traderId, UpdateSource updateSource);
+    void onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+               std::int64_t traderId, UpdateSource updateSource);
 
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);

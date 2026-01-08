@@ -166,19 +166,20 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
     }
 }
 
-std::optional<std::int64_t>
-PaperTradingSimulatorCore::bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
-                                             std::priority_queue<std::int64_t>& oppositeHeap) {
-    while (!oppositeHeap.empty()) {
-        const std::int64_t px = oppositeIsAsk ? -oppositeHeap.top() : oppositeHeap.top();
-        auto it = oppositeBook.find(px);
-        if (it != oppositeBook.end() && !it->second.empty()) {
-            return px;
-        }
-        oppositeHeap.pop();
-    }
-    return std::nullopt;
-}
+void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
+
+void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
+
+void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
+
+void PaperTradingSimulatorCore::onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                        std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
+
+void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                      std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
 
 void PaperTradingSimulatorCore::initFromL2Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
                                                    std::vector<std::int64_t>& quantities) {
@@ -225,16 +226,30 @@ void PaperTradingSimulatorCore::initFromL3Snapshot(std::vector<Side>& sides, std
         auto orderId = orderIds[i];
         auto traderId = traderIds[i];
 
+        // Enforce unique live order ids
+        if (orderInfo.contains(orderId)) {
+            throw std::runtime_error("Duplicate orderId found in L3 snapshot.");
+        }
+
         bool isBid = side == Side::BUY;
         auto& book = isBid ? bids : asks;
         auto& heap = isBid ? bidsHeap : asksHeap;
-        int sign = isBid ? 1 : -1;
 
-        OrderTraderQuantityTriplet otq{orderId, traderId, quantity};
+        // Get/create the price level in the real book
+        auto& priorityQueue = book[price];
+        const bool newLevel = priorityQueue.empty();
 
-        book.emplace(price, std::list<OrderTraderQuantityTriplet>{otq});
-        heap.push(static_cast<std::int64_t>(sign * price));
-        orderInfo.emplace(orderId, std::make_tuple(side, price, book.at(price).begin()));
+        // Append order at end (FIFO)
+        priorityQueue.emplace_back(orderId, traderId, quantity);
+        auto itNew = std::prev(priorityQueue.end());
+
+        // Only push price into heap the first time the level appears
+        if (newLevel) {
+            heap.push(isBid ? price : -price); // asks stored as negative
+        }
+
+        // Index for O(1) cancel/modify/execute
+        orderInfo.emplace(orderId, std::make_tuple(side, price, itNew));
     }
 }
 
