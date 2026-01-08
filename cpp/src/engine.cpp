@@ -13,23 +13,23 @@ void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsR
         break;
 
     case UpdateType::CANCEL:
-        /* code */
+        onCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::DELETE:
-        /* code */
+        onDelete(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::MATCH:
-        /* code */
+        onMatch(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::SET:
-        /* code */
+        onSet(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     default:
-        break;
+        throw std::runtime_error("Unknown updateType found.");
     }
 }
 
@@ -111,7 +111,11 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
                 }
 
                 if (!oppHeapCopy.empty()) {
-                    oppHeapCopy.pop();
+                    // Pop *all* duplicates of this same bestPx from the heap copy
+                    const auto decode = [&](std::int64_t top) { return oppIsAsk ? -top : top; };
+                    while (!oppHeapCopy.empty() && decode(oppHeapCopy.top()) == bestPx) {
+                        oppHeapCopy.pop();
+                    }
                 }
             } else {
                 auto itNode = levelList.begin();
