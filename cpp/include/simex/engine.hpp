@@ -6,6 +6,7 @@
 #include <deque>
 #include <iostream>
 #include <optional>
+#include <pair>
 #include <queue>
 #include <tuple>
 #include <unordered_map>
@@ -63,6 +64,7 @@ public:
                             std::vector<std::int64_t>& traderIds) override;
 
     std::optional<std::int64_t> depthAt(Side side, std::int64_t priceTicks) const;
+    std::vector<std::pair<std::int64_t, std::int64_t>> l2TopN(Side side, std::uint32_t n) const;
 
 private:
     using OrderTraderQuantityTriplet = std::tuple<std::int64_t, std::int64_t, std::int64_t>;
