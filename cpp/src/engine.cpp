@@ -166,6 +166,20 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
     }
 }
 
+std::optional<std::int64_t>
+PaperTradingSimulatorCore::bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
+                                             std::priority_queue<std::int64_t>& oppositeHeap) {
+    while (!oppositeHeap.empty()) {
+        const std::int64_t px = oppositeIsAsk ? -oppositeHeap.top() : oppositeHeap.top();
+        auto it = oppositeBook.find(px);
+        if (it != oppositeBook.end() && !it->second.empty()) {
+            return px;
+        }
+        oppositeHeap.pop();
+    }
+    return std::nullopt;
+}
+
 void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
                                          std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
 
