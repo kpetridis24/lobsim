@@ -69,8 +69,8 @@ private:
 
     void onAdd(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
                std::int64_t traderId, UpdateSource updateSource);
-    void onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
-                  std::int64_t traderId, UpdateSource updateSource);
+    void onSubtract(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                    std::int64_t traderId, UpdateSource updateSource);
     void onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
                   std::int64_t traderId, UpdateSource updateSource);
     void onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
