@@ -16,8 +16,6 @@ constexpr std::int64_t UnknownTraderIdSentinel = -1;
 constexpr std::int64_t UnknownAggressorIdSentinel = -1;
 constexpr std::int64_t NoAggressorNeededSentinel = -2;
 
-using SidePriceQuantityTicksTriplet = std::tuple<std::int8_t, std::int64_t, std::int64_t>;
-
 class IMatchingEngine {
 public:
     IMatchingEngine() = default;
@@ -29,12 +27,13 @@ public:
                         std::int64_t aggressorId = NoAggressorNeededSentinel,
                         UpdateSource updateSource = UpdateSource::HISTORICAL) = 0;
 
-    virtual void initFromL2Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                                    std::vector<std::int64_t>& quantities) = 0;
+    virtual void initFromL2Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                                    const std::vector<std::int64_t>& quantities) = 0;
 
-    virtual void initFromL3Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                                    std::vector<std::int64_t>& quantities, std::vector<std::int64_t>& orderIds,
-                                    std::vector<std::int64_t>& traderIds) = 0;
+    virtual void initFromL3Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                                    const std::vector<std::int64_t>& quantities,
+                                    const std::vector<std::int64_t>& orderIds,
+                                    const std::vector<std::int64_t>& traderIds) = 0;
 };
 
 class PaperTradingSimulatorCore final : public IMatchingEngine {
@@ -52,12 +51,12 @@ public:
                 std::int64_t traderId = UnknownTraderIdSentinel, std::int64_t aggressorId = NoAggressorNeededSentinel,
                 UpdateSource updateSource = UpdateSource::HISTORICAL) override;
 
-    void initFromL2Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                            std::vector<std::int64_t>& quantities) override;
+    void initFromL2Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                            const std::vector<std::int64_t>& quantities) override;
 
-    void initFromL3Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                            std::vector<std::int64_t>& quantities, std::vector<std::int64_t>& orderIds,
-                            std::vector<std::int64_t>& traderIds) override;
+    void initFromL3Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                            const std::vector<std::int64_t>& quantities, const std::vector<std::int64_t>& orderIds,
+                            const std::vector<std::int64_t>& traderIds) override;
 
     std::optional<std::int64_t> depthAt(Side side, std::int64_t priceTicks) const;
     std::vector<std::pair<std::int64_t, std::int64_t>> l2TopN(Side side, std::uint32_t n) const;
@@ -78,8 +77,13 @@ private:
     void onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
                std::int64_t traderId, UpdateSource updateSource);
 
+    void onPartialOrderCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                              std::int64_t traderId, UpdateSource updateSource);
+
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);
+
+    void clearState();
 
     // PriceTicks -> FIFO queue of orders sitting on that tick
     Book bids;
