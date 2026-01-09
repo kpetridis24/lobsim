@@ -27,7 +27,7 @@ public:
 
     std::optional<std::int64_t> depthAt(Side side, std::int64_t priceTicks) const;
     std::vector<std::pair<std::int64_t, std::int64_t>> l2TopN(Side side, std::uint32_t n) const;
-    std::int64_t getBestPriceTicks(Side side) const;
+    std::optional<std::int64_t> getBestPriceTicks(Side side) const;
     void setLogSink(ILogSink* sink);
 
 private:
@@ -60,8 +60,8 @@ private:
     Book bids;
     Book asks;
     // Convention is to maintain both as max heaps. Asks must be inserted with the sign reversed
-    std::priority_queue<std::int64_t> bidsHeap;
-    std::priority_queue<std::int64_t> asksHeap;
+    mutable std::priority_queue<std::int64_t> bidsHeap;
+    mutable std::priority_queue<std::int64_t> asksHeap;
     // For O(1) lookup based on orderId (for example for order cancel)
     // For this purpose, we store orderId -> {side, priceTicks, location in queue}
     std::unordered_map<std::int64_t, std::tuple<Side, std::int64_t, OrderPriorityQueue::iterator>> orderInfo;

@@ -377,6 +377,15 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(std::int64_t tsExchange, st
 
     liquidity -= take;
 
+    if (isTradeOnPassiveOrder && sink) {
+        auto takerSide = storedSide == Side::BUY ? Side::SELL : Side::BUY;
+        auto makerSource = std::get<3>(queueElement);
+        auto storedTraderId = std::get<1>(queueElement);
+        sink->onFill(FillRecord{seq, tsExchange, tsReceived, storedPriceTicks, take, storedSide, orderId,
+                                storedTraderId, makerSource, takerSide, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+                                updateSource});
+    }
+
     if (liquidity == 0) {
         queue.erase(queueLocationIt);
         if (queue.empty()) {
@@ -390,13 +399,6 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(std::int64_t tsExchange, st
     if (isTradeOnPassiveOrder && (updateSource == UpdateSource::STRATEGY)) {
         // TODO: Log warning. If someone wants to do a Market Order via their strategy, they must use an ADD that
         // crosses. In future we'll implement an aggressor API. MATCH is for the passive order ONLY.
-    }
-
-    if (isTradeOnPassiveOrder && sink) {
-        auto takerSide = side == Side::BUY ? Side::SELL : Side::BUY;
-        sink->onFill(FillRecord{seq, tsExchange, tsReceived, storedPriceTicks, take, side, orderId, traderId,
-                                updateSource, takerSide, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
-                                UpdateSource::UNKNOWN});
     }
 }
 
@@ -532,8 +534,21 @@ std::vector<std::pair<std::int64_t, std::int64_t>> PaperTradingSimulatorCore::l2
     return pvs;
 }
 
-std::int64_t PaperTradingSimulatorCore::getBestPriceTicks(Side side) const {
-    return side == Side::BUY ? bidsHeap.top() : -asksHeap.top();
+std::optional<std::int64_t> PaperTradingSimulatorCore::getBestPriceTicks(Side side) const {
+    const bool isBid = side == Side::BUY;
+    const auto& book = isBid ? bids : asks;
+    auto& heap = isBid ? bidsHeap : asksHeap;
+
+    while (!heap.empty()) {
+        const std::int64_t px = isBid ? heap.top() : -heap.top();
+        auto it = book.find(px);
+        if (it != book.end() && !it->second.empty()) {
+            return px;
+        }
+        heap.pop();
+    }
+
+    return std::nullopt;
 }
 
 void PaperTradingSimulatorCore::setLogSink(ILogSink* sink) {
