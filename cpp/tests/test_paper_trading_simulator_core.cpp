@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <numeric>
+#include <optional>
 #include <vector>
 
 static std::int64_t sum_fill_qty(const std::vector<FillRecord>& fills) {
@@ -366,6 +367,17 @@ TEST_CASE("ADD with qty=0 does nothing (no fills, no state change)") {
     CHECK_FALSE(sim.depthAt(Side::BUY, 100).has_value());
 }
 
+TEST_CASE("ADD with negative quantity is rejected") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {}, {}, {}, {}, {});
+
+    REQUIRE_THROWS_AS(sim.update(1, 2, Side::BUY, UpdateType::ADD, 100, -5, 1, 11, NoAggressorNeededSentinel,
+                                 UpdateSource::HISTORICAL),
+                      std::runtime_error);
+}
+
 TEST_CASE("Stale heap entry is popped and does not prevent matching next level") {
     PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
@@ -427,6 +439,60 @@ TEST_CASE("Paper sweep does not double-count liquidity when heap has duplicate p
     CHECK(d.value() == 5);
 }
 
+TEST_CASE("L2-seeded liquidity (orderId sentinel) can be consumed and emits fills with sentinel maker") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    // L2 snapshot uses UnknownOrderIdSentinel (-1)
+    std::vector<Side> sides{Side::SELL};
+    std::vector<std::int64_t> prices{100};
+    std::vector<std::int64_t> qtys{5};
+    sim.initFromL2Snapshot(sides, prices, qtys);
+
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, 100, 3, 9001, 900, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    const auto& fills = sink.getFills();
+    REQUIRE(fills.size() == 1);
+    CHECK(fills[0].makerOrderId == UnknownOrderIdSentinel);
+    CHECK(fills[0].qtyLots == 3);
+
+    auto depth = sim.depthAt(Side::SELL, 100);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 2);
+}
+
+TEST_CASE("SUBTRACT/DELETE/MATCH targeting L2-seeded sentinel orderId are treated as missing") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    sim.initFromL2Snapshot({Side::SELL}, {101}, {4});
+
+    // SUBTRACT
+    sim.update(1, 2, Side::SELL, UpdateType::SUBTRACT, 101, 2, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+               NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    auto depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4); // unchanged
+
+    // DELETE
+    sim.update(3, 4, Side::SELL, UpdateType::DELETE, 101, 0, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+               NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4);
+
+    // MATCH
+    sim.update(5, 6, Side::SELL, UpdateType::MATCH, 101, 2, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+               NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4);
+    CHECK(sink.getFills().empty());
+}
+
 TEST_CASE("initFromL3Snapshot throws on duplicate orderId") {
     PaperTradingSimulatorCore sim{};
 
@@ -447,4 +513,223 @@ TEST_CASE("update throws on unknown UpdateType") {
     REQUIRE_THROWS_AS(sim.update(1, 2, Side::BUY, static_cast<UpdateType>(999), 100, 1, 1, 1, NoAggressorNeededSentinel,
                                  UpdateSource::HISTORICAL),
                       std::runtime_error);
+}
+
+TEST_CASE("SUBTRACT reduces quantity without emitting fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::SELL}, {100}, {10}, {1}, {11});
+
+    sim.update(1, 2, Side::SELL, UpdateType::SUBTRACT, 100, 4, 1, 11, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    CHECK(sink.getFills().empty());
+    auto depth = sim.depthAt(Side::SELL, 100);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 6);
+}
+
+TEST_CASE("SUBTRACT removing the top level updates best price despite stale heap") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    // best bid 101, next 99
+    seed_l3(sim, {Side::BUY, Side::BUY}, {101, 99}, {5, 7}, {10, 11}, {21, 22});
+
+    sim.update(1, 2, Side::BUY, UpdateType::SUBTRACT, 101, 5, 10, 21, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    auto best = sim.getBestPriceTicks(Side::BUY);
+    REQUIRE(best.has_value());
+    CHECK(best.value() == 99);
+}
+
+TEST_CASE("SUBTRACT with quantity exceeding liquidity clamps to zero and removes order") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::SELL}, {105}, {3}, {1001}, {501});
+
+    sim.update(1, 2, Side::SELL, UpdateType::SUBTRACT, 105, 10, 1001, 501, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    CHECK_FALSE(sim.depthAt(Side::SELL, 105).has_value());
+    CHECK_FALSE(sim.getBestPriceTicks(Side::SELL).has_value());
+}
+
+TEST_CASE("SUBTRACT with qty 0 is a no-op; negative qty throws") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::BUY}, {100}, {4}, {1}, {1});
+
+    sim.update(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, 0, 1, 1, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+    auto depth = sim.depthAt(Side::BUY, 100);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4);
+
+    REQUIRE_THROWS_AS(sim.update(3, 4, Side::BUY, UpdateType::SUBTRACT, 100, -1, 1, 1, NoAggressorNeededSentinel,
+                                 UpdateSource::HISTORICAL),
+                      std::runtime_error);
+}
+
+TEST_CASE("SUBTRACT on missing orderId does nothing") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::SELL}, {105}, {5}, {10}, {20});
+
+    sim.update(1, 2, Side::SELL, UpdateType::SUBTRACT, 105, 2, 9999, 123, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    auto depth = sim.depthAt(Side::SELL, 105);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 5);
+}
+
+TEST_CASE("DELETE removes order regardless of provided side/price") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::SELL, Side::SELL}, {101, 103}, {2, 4}, {1, 2}, {11, 12});
+
+    // Mismatch side/price but correct orderId
+    sim.update(1, 2, Side::BUY, UpdateType::DELETE, 9999, 0, 1, 11, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    CHECK_FALSE(sim.depthAt(Side::SELL, 101).has_value());
+    auto depth = sim.depthAt(Side::SELL, 103);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4);
+}
+
+TEST_CASE("DELETE on missing orderId is a no-op") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::SELL}, {101}, {2}, {1}, {11});
+
+    sim.update(1, 2, Side::SELL, UpdateType::DELETE, 101, 0, 999, 11, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    auto depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 2);
+}
+
+TEST_CASE("DELETE of best level leaves heap stale but best price still resolves") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::SELL, Side::SELL}, {100, 101}, {5, 6}, {10, 11}, {20, 21});
+
+    sim.update(1, 2, Side::SELL, UpdateType::DELETE, 100, 0, 10, 20, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    auto best = sim.getBestPriceTicks(Side::SELL);
+    REQUIRE(best.has_value());
+    CHECK(best.value() == 101);
+}
+
+TEST_CASE("MATCH partially fills passive order and emits fill with maker metadata") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::SELL}, {101}, {5}, {5001}, {9001});
+
+    sim.update(1, 2, Side::SELL, UpdateType::MATCH, 101, 3, 5001, 9001, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+
+    const auto& fills = sink.getFills();
+    REQUIRE(fills.size() == 1);
+    CHECK(fills[0].qtyLots == 3);
+    CHECK(fills[0].makerOrderId == 5001);
+    CHECK(fills[0].makerTraderId == 9001);
+    CHECK(fills[0].makerSource == UpdateSource::HISTORICAL);
+    CHECK(fills[0].takerSource == UpdateSource::HISTORICAL);
+
+    auto depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 2);
+}
+
+TEST_CASE("MATCH over-aggressive qty fills remaining, removes order, and best price moves on") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::BUY, Side::BUY}, {100, 99}, {2, 4}, {1, 2}, {11, 22});
+
+    sim.update(1, 2, Side::BUY, UpdateType::MATCH, 100, 10, 1, 11, NoAggressorNeededSentinel, UpdateSource::STRATEGY);
+
+    const auto& fills = sink.getFills();
+    REQUIRE(fills.size() == 1);
+    CHECK(fills[0].qtyLots == 2); // only existing liquidity filled
+    CHECK_FALSE(sim.depthAt(Side::BUY, 100).has_value());
+
+    auto best = sim.getBestPriceTicks(Side::BUY);
+    REQUIRE(best.has_value());
+    CHECK(best.value() == 99);
+}
+
+TEST_CASE("MATCH with qty 0 no-ops; negative qty throws; missing orderId ignored") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::SELL}, {101}, {5}, {10}, {20});
+
+    sink.reset();
+    sim.update(1, 2, Side::SELL, UpdateType::MATCH, 101, 0, 10, 20, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+    CHECK(sink.getFills().empty());
+
+    REQUIRE_THROWS_AS(sim.update(1, 2, Side::SELL, UpdateType::MATCH, 101, -1, 10, 20, NoAggressorNeededSentinel,
+                                 UpdateSource::HISTORICAL),
+                      std::runtime_error);
+
+    sink.reset();
+    sim.update(1, 2, Side::SELL, UpdateType::MATCH, 101, 2, 9999, 20, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+    CHECK(sink.getFills().empty());
+    auto depth = sim.depthAt(Side::SELL, 101);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 5);
+}
+
+TEST_CASE("SET reduces quantity to exact value and can increase it") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::SELL}, {105}, {10}, {1}, {11});
+
+    sim.update(1, 2, Side::SELL, UpdateType::SET, 105, 4, 1, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    auto depth = sim.depthAt(Side::SELL, 105);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 4);
+
+    sim.update(3, 4, Side::SELL, UpdateType::SET, 105, 12, 1, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    depth = sim.depthAt(Side::SELL, 105);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 12);
+}
+
+TEST_CASE("SET to zero or negative removes order and advances best price") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::SELL, Side::SELL}, {100, 105}, {5, 6}, {1, 2}, {11, 22});
+
+    sim.update(1, 2, Side::SELL, UpdateType::SET, 100, 0, 1, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    auto best = sim.getBestPriceTicks(Side::SELL);
+    REQUIRE(best.has_value());
+    CHECK(best.value() == 105);
+
+    sim.update(3, 4, Side::SELL, UpdateType::SET, 105, -10, 2, 22, NoAggressorNeededSentinel,
+               UpdateSource::HISTORICAL);
+    CHECK_FALSE(sim.getBestPriceTicks(Side::SELL).has_value());
+}
+
+TEST_CASE("SET on missing orderId is ignored") {
+    PaperTradingSimulatorCore sim{};
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1}, {11});
+
+    sim.update(1, 2, Side::BUY, UpdateType::SET, 100, 2, 9999, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+
+    auto depth = sim.depthAt(Side::BUY, 100);
+    REQUIRE(depth.has_value());
+    CHECK(depth.value() == 5);
 }
