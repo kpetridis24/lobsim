@@ -1,4 +1,4 @@
-#include "simex/engine.hpp"
+#include "simex/paper_trading_simulator_core.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -14,15 +14,21 @@
  *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
  *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
  * 4. Write tests for the update method and ensure all edge cases (including sentinels used for IDs) are tested.
+ * 5. Add checks for out-of-limits values -> reject event completely
  */
 
 void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
                                        UpdateType updateType, std::int64_t priceTicks, std::int64_t quantityLots,
                                        std::int64_t orderId, std::int64_t traderId, std::int64_t aggressorId,
                                        UpdateSource updateSource) {
+    if (sink) {
+        sink->onEventApply(EventApplyRecord{seq, tsExchange, tsReceived, side, updateType, updateSource, priceTicks,
+                                            quantityLots, orderId, traderId, aggressorId});
+    }
+
     switch (updateType) {
     case UpdateType::ADD:
-        onAdd(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+        onAdd(tsExchange, tsReceived, side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::DELETE:
@@ -30,11 +36,11 @@ void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsR
         break;
 
     case UpdateType::SUBTRACT:
-        onSubtract(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+        onSubtract(tsExchange, tsReceived, side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::MATCH:
-        onMatch(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+        onMatch(tsExchange, tsReceived, side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::SET:
@@ -44,10 +50,13 @@ void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsR
     default:
         throw std::runtime_error("Unknown updateType found.");
     }
+
+    ++seq;
 }
 
-void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                      std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+void PaperTradingSimulatorCore::onAdd(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
+                                      std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                                      std::int64_t traderId, UpdateSource updateSource) {
     const bool paper = updateSource == UpdateSource::STRATEGY;
     const bool isBid = side == Side::BUY;
 
@@ -110,16 +119,21 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
                     if (remaining <= 0) {
                         break;
                     }
-                    const auto makerOrderId = std::get<0>(node);
+                    auto makerOrderId = std::get<0>(node);
                     const auto makerTraderId = std::get<1>(node);
                     const auto makerQty = std::get<2>(node);
+                    const auto makerSource = std::get<3>(node);
+
                     if (makerQty <= 0) {
                         continue;
                     }
 
                     const std::int64_t take = std::min<std::int64_t>(makerQty, remaining);
-                    // TODO: here emit fill (tsExchange, tsReceived, bestPx, take, makerOrderId, makerTraderId, orderId,
-                    // traderId, updateSource)
+                    if (sink) {
+                        auto makerSide = side == Side::BUY ? Side::SELL : Side::BUY;
+                        sink->onFill(FillRecord{seq, tsExchange, tsReceived, bestPx, take, makerSide, makerOrderId,
+                                                makerTraderId, makerSource, side, orderId, traderId, updateSource});
+                    }
                     remaining -= take;
                 }
 
@@ -137,6 +151,7 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
                     const auto makerOrderId = std::get<0>(node);
                     const auto makerTraderId = std::get<1>(node);
                     auto& makerQty = std::get<2>(node);
+                    auto& makerSource = std::get<3>(node);
 
                     if (makerQty <= 0) {
                         orderInfo.erase(makerOrderId);
@@ -145,8 +160,12 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
                     }
 
                     const std::int64_t take = std::min<std::int64_t>(makerQty, remaining);
-                    // TODO: here emit fill (tsExchange, tsReceived, bestPx, take, makerOrderId, makerTraderId, orderId,
-                    // traderId, updateSource)
+
+                    if (sink) {
+                        auto makerSide = side == Side::BUY ? Side::SELL : Side::BUY;
+                        sink->onFill(FillRecord{seq, tsExchange, tsReceived, bestPx, take, makerSide, makerOrderId,
+                                                makerTraderId, makerSource, side, orderId, traderId, updateSource});
+                    }
 
                     makerQty -= take;
                     remaining -= take;
@@ -174,7 +193,7 @@ void PaperTradingSimulatorCore::onAdd(Side side, std::int64_t priceTicks, std::i
     if (remaining > 0) {
         auto& level = ownBook[priceTicks];
         const bool newLevel = level.empty();
-        level.emplace_back(orderId, traderId, remaining);
+        level.emplace_back(orderId, traderId, remaining, updateSource);
         auto itNew = std::prev(level.end());
         if (newLevel) {
             ownHeap.push(isBid ? priceTicks : -priceTicks);
@@ -224,7 +243,6 @@ void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std
     // The design decision here is to complete the DELETE based only on the provided orderId.
     const bool isBid = storedSide == Side::BUY;
     auto& book = isBid ? bids : asks;
-    auto& heap = isBid ? bidsHeap : asksHeap;
 
     auto bIt = book.find(storedPriceTicks);
     if (bIt == book.end()) {
@@ -242,14 +260,17 @@ void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std
     orderInfo.erase(it);
 }
 
-void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                           std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
-    onPartialOrderCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+void PaperTradingSimulatorCore::onSubtract(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
+                                           std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                                           std::int64_t traderId, UpdateSource updateSource) {
+    onPartialOrderCancel(tsExchange, tsReceived, side, priceTicks, quantityLots, orderId, traderId, updateSource,
+                         false);
 }
 
-void PaperTradingSimulatorCore::onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                        std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
-    onPartialOrderCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+void PaperTradingSimulatorCore::onMatch(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
+                                        std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
+                                        std::int64_t traderId, UpdateSource updateSource) {
+    onPartialOrderCancel(tsExchange, tsReceived, side, priceTicks, quantityLots, orderId, traderId, updateSource, true);
 }
 
 void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
@@ -287,7 +308,7 @@ void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::i
     }
 
     OrderPriorityQueue& queue = bIt->second;
-    OrderTraderQuantityTriplet& queueElement = *queueLocationIt;
+    OrderTraderQuantitySource& queueElement = *queueLocationIt;
 
     auto newQuantity = quantityLots < 0 ? 0 : quantityLots;
     if (newQuantity == 0) {
@@ -301,9 +322,10 @@ void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::i
     }
 }
 
-void PaperTradingSimulatorCore::onPartialOrderCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+void PaperTradingSimulatorCore::onPartialOrderCancel(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
+                                                     std::int64_t priceTicks, std::int64_t quantityLots,
                                                      std::int64_t orderId, std::int64_t traderId,
-                                                     UpdateSource updateSource) {
+                                                     UpdateSource updateSource, bool isTradeOnPassiveOrder) {
     if (quantityLots < 0) {
         throw std::runtime_error("Negative quantityLots found.");
     }
@@ -344,7 +366,7 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(Side side, std::int64_t pri
     }
 
     OrderPriorityQueue& queue = bIt->second;
-    OrderTraderQuantityTriplet& queueElement = *queueLocationIt;
+    OrderTraderQuantitySource& queueElement = *queueLocationIt;
 
     auto liquidity = std::get<2>(queueElement);
     auto take = std::min<std::int64_t>(liquidity, quantityLots);
@@ -363,6 +385,18 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(Side side, std::int64_t pri
         orderInfo.erase(it);
     } else {
         std::get<2>(queueElement) = liquidity;
+    }
+
+    if (isTradeOnPassiveOrder && (updateSource == UpdateSource::STRATEGY)) {
+        // TODO: Log warning. If someone wants to do a Market Order via their strategy, they must use an ADD that
+        // crosses. In future we'll implement an aggressor API. MATCH is for the passive order ONLY.
+    }
+
+    if (isTradeOnPassiveOrder && sink) {
+        auto takerSide = side == Side::BUY ? Side::SELL : Side::BUY;
+        sink->onFill(FillRecord{seq, tsExchange, tsReceived, storedPriceTicks, take, side, orderId, traderId,
+                                updateSource, takerSide, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+                                UpdateSource::UNKNOWN});
     }
 }
 
@@ -385,14 +419,15 @@ void PaperTradingSimulatorCore::initFromL2Snapshot(const std::vector<Side>& side
         auto& heap = isBid ? bidsHeap : asksHeap;
         int sign = isBid ? 1 : -1;
 
-        OrderTraderQuantityTriplet otq{UnknownOrderIdSentinel, UnknownTraderIdSentinel, quantity};
+        OrderTraderQuantitySource otq{UnknownOrderIdSentinel, UnknownTraderIdSentinel, quantity,
+                                      UpdateSource::HISTORICAL};
 
         if (book.find(price) != book.end()) {
             throw std::runtime_error("Duplicate price found. Initializing from L2 snapshot requires volumes to be "
                                      "aggregated per price-level.");
         }
 
-        book.emplace(price, std::list<OrderTraderQuantityTriplet>{otq});
+        book.emplace(price, std::list<OrderTraderQuantitySource>{otq});
         heap.push(static_cast<std::int64_t>(sign * price));
     }
 }
@@ -429,7 +464,7 @@ void PaperTradingSimulatorCore::initFromL3Snapshot(const std::vector<Side>& side
         const bool newLevel = priorityQueue.empty();
 
         // Append order at end (FIFO)
-        priorityQueue.emplace_back(orderId, traderId, quantity);
+        priorityQueue.emplace_back(orderId, traderId, quantity, UpdateSource::HISTORICAL);
         auto itNew = std::prev(priorityQueue.end());
 
         // Only push price into heap the first time the level appears
@@ -447,6 +482,9 @@ void PaperTradingSimulatorCore::clearState() {
     bidsHeap = std::priority_queue<std::int64_t>();
     asksHeap = std::priority_queue<std::int64_t>();
     orderInfo.clear();
+    if (sink) {
+        sink->reset();
+    }
 }
 
 std::optional<std::int64_t> PaperTradingSimulatorCore::depthAt(Side side, std::int64_t priceTicks) const {
@@ -457,10 +495,10 @@ std::optional<std::int64_t> PaperTradingSimulatorCore::depthAt(Side side, std::i
         return std::nullopt;
     }
 
-    const std::list<OrderTraderQuantityTriplet>& priorityQueue = it->second;
+    const std::list<OrderTraderQuantitySource>& priorityQueue = it->second;
     std::int64_t totalLiquidity = std::accumulate(
         priorityQueue.begin(), priorityQueue.end(), std::int64_t{0},
-        [](std::int64_t acc, const OrderTraderQuantityTriplet& triplet) { return acc + std::get<2>(triplet); });
+        [](std::int64_t acc, const OrderTraderQuantitySource& triplet) { return acc + std::get<2>(triplet); });
     return totalLiquidity;
 }
 
@@ -476,10 +514,10 @@ std::vector<std::pair<std::int64_t, std::int64_t>> PaperTradingSimulatorCore::l2
 
     std::transform(book.begin(), book.end(), std::back_inserter(pvs), [](const auto& p) {
         std::int64_t price = p.first;
-        const std::list<OrderTraderQuantityTriplet>& priorityQueue = p.second;
+        const std::list<OrderTraderQuantitySource>& priorityQueue = p.second;
         std::int64_t totalLiquidity = std::accumulate(
             priorityQueue.begin(), priorityQueue.end(), std::int64_t{0},
-            [](std::int64_t acc, const OrderTraderQuantityTriplet& triplet) { return acc + std::get<2>(triplet); });
+            [](std::int64_t acc, const OrderTraderQuantitySource& triplet) { return acc + std::get<2>(triplet); });
         return std::make_pair(price, totalLiquidity);
     });
 
@@ -492,4 +530,12 @@ std::vector<std::pair<std::int64_t, std::int64_t>> PaperTradingSimulatorCore::l2
     const std::size_t limit = std::min<std::size_t>(n, pvs.size());
     pvs.resize(limit);
     return pvs;
+}
+
+std::int64_t PaperTradingSimulatorCore::getBestPriceTicks(Side side) const {
+    return side == Side::BUY ? bidsHeap.top() : -asksHeap.top();
+}
+
+void PaperTradingSimulatorCore::setLogSink(ILogSink* sink) {
+    this->sink = sink;
 }

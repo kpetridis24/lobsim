@@ -20,7 +20,8 @@ include(GNUInstallDirs)
 # ---- Core library: simex_core ----
 # List sources explicitly (recommended). Add more files as you implement.
 set(SIMEX_CORE_SOURCES
-  cpp/src/engine.cpp
+  cpp/src/paper_trading_simulator_core.cpp
+  cpp/src/in_memory_sink.cpp
 )
 
 add_library(simex_core ${SIMEX_CORE_SOURCES})
@@ -79,7 +80,7 @@ if(SIMEX_BUILD_TESTS)
   FetchContent_MakeAvailable(Catch2)
 
   add_executable(simex_core_tests
-    cpp/tests/test_engine.cpp
+    cpp/tests/test_paper_trading_simulator_core.cpp
   )
   target_link_libraries(simex_core_tests PRIVATE simex::core Catch2::Catch2WithMain)
 
