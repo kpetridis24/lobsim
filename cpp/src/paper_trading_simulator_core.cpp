@@ -57,6 +57,10 @@ void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsR
 void PaperTradingSimulatorCore::onAdd(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
                                       std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
                                       std::int64_t traderId, UpdateSource updateSource) {
+    if (quantityLots < 0) {
+        throw std::runtime_error("Negative ADD quantity found.");
+    }
+
     const bool paper = updateSource == UpdateSource::STRATEGY;
     const bool isBid = side == Side::BUY;
 
