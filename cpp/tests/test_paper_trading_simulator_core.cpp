@@ -290,15 +290,15 @@ TEST_CASE("HISTORICAL ADD crossing fully fills and does not rest") {
 }
 
 TEST_CASE("HISTORICAL ADD crossing consumes multiple levels in price priority") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
+    sim.setLogSink(&sink);
 
     // asks: 3@100, 4@101, 5@103
-    seed_l3(eng, {Side::SELL, Side::SELL, Side::SELL}, {100, 101, 103}, {3, 4, 5}, {2001, 2002, 2003}, {601, 602, 603});
+    seed_l3(sim, {Side::SELL, Side::SELL, Side::SELL}, {100, 101, 103}, {3, 4, 5}, {2001, 2002, 2003}, {601, 602, 603});
 
     // BUY 10 @103 => 3@100 + 4@101 + 3@103
-    eng.update(1, 2, Side::BUY, UpdateType::ADD, /*price*/ 103, /*qty*/ 10,
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, /*price*/ 103, /*qty*/ 10,
                /*orderId*/ 9001, /*traderId*/ 900, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
 
     const auto& fills = sink.getFills();
@@ -310,24 +310,24 @@ TEST_CASE("HISTORICAL ADD crossing consumes multiple levels in price priority") 
     CHECK(fills[1].priceTicks == 101);
     CHECK(fills.back().priceTicks == 103);
 
-    CHECK_FALSE(eng.depthAt(Side::SELL, 100).has_value());
-    CHECK_FALSE(eng.depthAt(Side::SELL, 101).has_value());
+    CHECK_FALSE(sim.depthAt(Side::SELL, 100).has_value());
+    CHECK_FALSE(sim.depthAt(Side::SELL, 101).has_value());
 
-    auto d103 = eng.depthAt(Side::SELL, 103);
+    auto d103 = sim.depthAt(Side::SELL, 103);
     REQUIRE(d103.has_value());
     CHECK(d103.value() == 2); // 5 - 3
 }
 
 TEST_CASE("FIFO within a level: older resting order is consumed first") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
+    sim.setLogSink(&sink);
 
     // Two bids at same price, FIFO by insertion order
-    seed_l3(eng, {Side::BUY, Side::BUY}, {100, 100}, {5, 7}, {3001, 3002}, {701, 702});
+    seed_l3(sim, {Side::BUY, Side::BUY}, {100, 100}, {5, 7}, {3001, 3002}, {701, 702});
 
     // SELL 6 @90 crosses best bid (100). Should take 5 from 3001 then 1 from 3002
-    eng.update(1, 2, Side::SELL, UpdateType::ADD, 90, 6, 4001, 800, NoAggressorNeededSentinel,
+    sim.update(1, 2, Side::SELL, UpdateType::ADD, 90, 6, 4001, 800, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     const auto& fills = sink.getFills();
@@ -340,54 +340,54 @@ TEST_CASE("FIFO within a level: older resting order is consumed first") {
 }
 
 TEST_CASE("ADD with duplicate orderId is ignored (no fills, no state change)") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
-    seed_l3(eng, {Side::SELL}, {105}, {10}, {1001}, {501});
+    sim.setLogSink(&sink);
+    seed_l3(sim, {Side::SELL}, {105}, {10}, {1001}, {501});
     // Attempt ADD with same orderId (should early-return)
-    eng.update(1, 2, Side::BUY, UpdateType::ADD, 110, 5, 1001, 900, NoAggressorNeededSentinel,
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, 110, 5, 1001, 900, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     CHECK(sink.getFills().empty());
 
-    auto d = eng.depthAt(Side::SELL, 105);
+    auto d = sim.depthAt(Side::SELL, 105);
     REQUIRE(d.has_value());
     CHECK(d.value() == 10);
 }
 
 TEST_CASE("ADD with qty=0 does nothing (no fills, no state change)") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
-    seed_l3(eng, {}, {}, {}, {}, {});
-    eng.update(1, 2, Side::BUY, UpdateType::ADD, 100, 0, 1, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
+    sim.setLogSink(&sink);
+    seed_l3(sim, {}, {}, {}, {}, {});
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, 100, 0, 1, 11, NoAggressorNeededSentinel, UpdateSource::HISTORICAL);
 
     CHECK(sink.getFills().empty());
-    CHECK_FALSE(eng.depthAt(Side::BUY, 100).has_value());
+    CHECK_FALSE(sim.depthAt(Side::BUY, 100).has_value());
 }
 
 TEST_CASE("Stale heap entry is popped and does not prevent matching next level") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
+    sim.setLogSink(&sink);
 
     // ask 100 qty 5
-    seed_l3(eng, {Side::SELL}, {100}, {5}, {5001}, {901});
+    seed_l3(sim, {Side::SELL}, {100}, {5}, {5001}, {901});
 
     // consume it fully -> level removed, heap retains stale -100
-    eng.update(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 6001, 999, NoAggressorNeededSentinel,
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 6001, 999, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     sink.reset();
 
     // add new ask at 101
-    eng.update(3, 4, Side::SELL, UpdateType::ADD, 101, 7, 5002, 902, NoAggressorNeededSentinel,
+    sim.update(3, 4, Side::SELL, UpdateType::ADD, 101, 7, 5002, 902, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     sink.reset();
 
     // buy crossing should match at 101 (not get stuck on stale 100)
-    eng.update(5, 6, Side::BUY, UpdateType::ADD, 101, 2, 6002, 999, NoAggressorNeededSentinel,
+    sim.update(5, 6, Side::BUY, UpdateType::ADD, 101, 2, 6002, 999, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     const auto& fills = sink.getFills();
@@ -397,38 +397,38 @@ TEST_CASE("Stale heap entry is popped and does not prevent matching next level")
 }
 
 TEST_CASE("Paper sweep does not double-count liquidity when heap has duplicate price entries") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
+    sim.setLogSink(&sink);
 
     // ask 100 qty 5
-    seed_l3(eng, {Side::SELL}, {100}, {5}, {7001}, {1001});
+    seed_l3(sim, {Side::SELL}, {100}, {5}, {7001}, {1001});
 
     // historical BUY consumes ask level -> leaves stale heap entry for 100
-    eng.update(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 8001, 2001, NoAggressorNeededSentinel,
+    sim.update(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 8001, 2001, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     // re-add ask 100 qty 5 (pushes -100 again) => heap contains duplicate -100 entries
-    eng.update(3, 4, Side::SELL, UpdateType::ADD, 100, 5, 7002, 1002, NoAggressorNeededSentinel,
+    sim.update(3, 4, Side::SELL, UpdateType::ADD, 100, 5, 7002, 1002, NoAggressorNeededSentinel,
                UpdateSource::HISTORICAL);
 
     sink.reset();
 
     // Strategy BUY should only fill 5 once (not 10)
-    eng.update(5, 6, Side::BUY, UpdateType::ADD, 100, 10, 9001, 3001, NoAggressorNeededSentinel,
+    sim.update(5, 6, Side::BUY, UpdateType::ADD, 100, 10, 9001, 3001, NoAggressorNeededSentinel,
                UpdateSource::STRATEGY);
 
     const auto& fills = sink.getFills();
     CHECK(sum_fill_qty(fills) == 5);
 
     // Book unchanged by paper mode (still 5 @100)
-    auto d = eng.depthAt(Side::SELL, 100);
+    auto d = sim.depthAt(Side::SELL, 100);
     REQUIRE(d.has_value());
     CHECK(d.value() == 5);
 }
 
 TEST_CASE("initFromL3Snapshot throws on duplicate orderId") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
 
     const std::vector<Side> sides{Side::SELL, Side::SELL};
     const std::vector<std::int64_t> prices{100, 101};
@@ -436,15 +436,15 @@ TEST_CASE("initFromL3Snapshot throws on duplicate orderId") {
     const std::vector<std::int64_t> orderIds{1, 1}; // duplicate
     const std::vector<std::int64_t> traderIds{10, 11};
 
-    REQUIRE_THROWS_AS(eng.initFromL3Snapshot(sides, prices, qtys, orderIds, traderIds), std::runtime_error);
+    REQUIRE_THROWS_AS(sim.initFromL3Snapshot(sides, prices, qtys, orderIds, traderIds), std::runtime_error);
 }
 
 TEST_CASE("update throws on unknown UpdateType") {
-    PaperTradingSimulatorCore eng{};
+    PaperTradingSimulatorCore sim{};
     InMemoryLogSink sink;
-    eng.setLogSink(&sink);
+    sim.setLogSink(&sink);
 
-    REQUIRE_THROWS_AS(eng.update(1, 2, Side::BUY, static_cast<UpdateType>(999), 100, 1, 1, 1, NoAggressorNeededSentinel,
+    REQUIRE_THROWS_AS(sim.update(1, 2, Side::BUY, static_cast<UpdateType>(999), 100, 1, 1, 1, NoAggressorNeededSentinel,
                                  UpdateSource::HISTORICAL),
                       std::runtime_error);
 }
