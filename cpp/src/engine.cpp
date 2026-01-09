@@ -12,12 +12,12 @@ void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsR
         onAdd(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
-    case UpdateType::CANCEL:
-        onCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
-        break;
-
     case UpdateType::DELETE:
         onDelete(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+        break;
+
+    case UpdateType::SUBTRACT:
+        onSubtract(side, priceTicks, quantityLots, orderId, traderId, updateSource);
         break;
 
     case UpdateType::MATCH:
@@ -184,11 +184,102 @@ PaperTradingSimulatorCore::bestOppositePrice(bool oppositeIsAsk, const Book& opp
     return std::nullopt;
 }
 
-void PaperTradingSimulatorCore::onCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
-
 void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
+                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+    auto it = orderInfo.find(orderId);
+    if (it == orderInfo.end()) {
+        // TODO: log DELETE on non-existing orderId.
+        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
+        return;
+    }
+
+    auto& info = it->second;
+
+    auto storedSide = std::get<0>(info);
+    if (storedSide != side) {
+        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto storedPriceTicks = std::get<1>(info);
+    if (storedPriceTicks != priceTicks) {
+        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto queueLocationIt = std::get<2>(info);
+
+    // Important! Use stored side (truth) to access. If provided side is different, it has been logged as corrupt.
+    // The design decision here is to complete the DELETE based only on the provided orderId.
+    const bool isBid = storedSide == Side::BUY;
+    auto& book = isBid ? bids : asks;
+    auto& heap = isBid ? bidsHeap : asksHeap;
+
+    auto bIt = book.find(storedPriceTicks);
+    if (bIt == book.end()) {
+        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+    }
+
+    OrderPriorityQueue& queue = bIt->second;
+    queue.erase(queueLocationIt);
+
+    if (queue.empty()) {
+        book.erase(bIt);
+        // TODO: check if heap behaves properly after this, with stale entry.
+    }
+
+    orderInfo.erase(it);
+}
+
+void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                           std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+    auto it = orderInfo.find(orderId);
+    if (it == orderInfo.end()) {
+        // TODO: log SUBTRACT on non-existing orderId.
+        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
+        return;
+    }
+
+    auto& info = it->second;
+
+    auto storedSide = std::get<0>(info);
+    if (storedSide != side) {
+        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto storedPriceTicks = std::get<1>(info);
+    if (storedPriceTicks != priceTicks) {
+        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto queueLocationIt = std::get<2>(info);
+
+    // Important! Use stored side (truth) to access. If provided side is different, it has been logged as corrupt.
+    // The design decision here is to complete the DELETE based only on the provided orderId.
+    const bool isBid = storedSide == Side::BUY;
+    auto& book = isBid ? bids : asks;
+    auto& heap = isBid ? bidsHeap : asksHeap;
+
+    auto bIt = book.find(storedPriceTicks);
+    if (bIt == book.end()) {
+        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+    }
+
+    OrderPriorityQueue& queue = bIt->second;
+    OrderTraderQuantityTriplet& queueElement = *queueLocationIt;
+
+    auto liquidity = std::get<2>(queueElement);
+    auto take = std::min<std::int64_t>(liquidity, quantityLots);
+    liquidity -= take;
+
+    if (liquidity == 0) {
+        queue.erase(queueLocationIt);
+        if (queue.empty()) {
+            book.erase(bIt);
+        }
+        orderInfo.erase(it);
+    } else {
+        std::get<2>(queueElement) = liquidity;
+    }
+}
 
 void PaperTradingSimulatorCore::onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
                                         std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
@@ -263,7 +354,6 @@ void PaperTradingSimulatorCore::initFromL3Snapshot(std::vector<Side>& sides, std
             heap.push(isBid ? price : -price); // asks stored as negative
         }
 
-        // Index for O(1) cancel/modify/execute
         orderInfo.emplace(orderId, std::make_tuple(side, price, itNew));
     }
 }
