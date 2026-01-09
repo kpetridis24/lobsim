@@ -1,7 +1,20 @@
 #include "simex/engine.hpp"
 
+#include <algorithm>
+#include <iostream>
+#include <iterator>
 #include <numeric>
 #include <stdexcept>
+
+/**
+ * TODO:
+ * 1. Design and implement logging/emitting of events.
+ * 2. Perhaps use an internal order/event flag (monotonic seq) for reproducibility/determinism.
+ * 3. For now, if a strategy wants to execute a market order, it should do it with an ADD call at
+ *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
+ *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
+ * 4. Write tests for the update method and ensure all edge cases (including sentinels used for IDs) are tested.
+ */
 
 void PaperTradingSimulatorCore::update(std::int64_t tsExchange, std::int64_t tsReceived, Side side,
                                        UpdateType updateType, std::int64_t priceTicks, std::int64_t quantityLots,
@@ -231,6 +244,74 @@ void PaperTradingSimulatorCore::onDelete(Side side, std::int64_t priceTicks, std
 
 void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
                                            std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+    onPartialOrderCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+}
+
+void PaperTradingSimulatorCore::onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                        std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+    onPartialOrderCancel(side, priceTicks, quantityLots, orderId, traderId, updateSource);
+}
+
+void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                      std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {
+    if (quantityLots < 0) {
+        // TODO: log that set with negative liquidity was requested. Set to 0 for non-blocking behaviour.
+    }
+    auto it = orderInfo.find(orderId);
+    if (it == orderInfo.end()) {
+        // TODO: log SET on non-existing orderId.
+        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
+        return;
+    }
+
+    auto& info = it->second;
+
+    auto storedSide = std::get<0>(info);
+    if (storedSide != side) {
+        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto storedPriceTicks = std::get<1>(info);
+    if (storedPriceTicks != priceTicks) {
+        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+    }
+
+    auto queueLocationIt = std::get<2>(info);
+
+    const bool isBid = storedSide == Side::BUY;
+    auto& book = isBid ? bids : asks;
+
+    auto bIt = book.find(storedPriceTicks);
+    if (bIt == book.end()) {
+        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+    }
+
+    OrderPriorityQueue& queue = bIt->second;
+    OrderTraderQuantityTriplet& queueElement = *queueLocationIt;
+
+    auto newQuantity = quantityLots < 0 ? 0 : quantityLots;
+    if (newQuantity == 0) {
+        queue.erase(queueLocationIt);
+        if (queue.empty()) {
+            book.erase(bIt);
+        }
+        orderInfo.erase(it);
+    } else {
+        std::get<2>(queueElement) = newQuantity;
+    }
+}
+
+void PaperTradingSimulatorCore::onPartialOrderCancel(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
+                                                     std::int64_t orderId, std::int64_t traderId,
+                                                     UpdateSource updateSource) {
+    if (quantityLots < 0) {
+        throw std::runtime_error("Negative quantityLots found.");
+    }
+    if (quantityLots == 0) {
+        // TODO: log that a order cancel with 0 quantity was requested.
+        return;
+    }
+
     auto it = orderInfo.find(orderId);
     if (it == orderInfo.end()) {
         // TODO: log SUBTRACT on non-existing orderId.
@@ -253,10 +334,9 @@ void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, s
     auto queueLocationIt = std::get<2>(info);
 
     // Important! Use stored side (truth) to access. If provided side is different, it has been logged as corrupt.
-    // The design decision here is to complete the DELETE based only on the provided orderId.
+    // The design decision here is to complete the partial cancel based only on the provided orderId.
     const bool isBid = storedSide == Side::BUY;
     auto& book = isBid ? bids : asks;
-    auto& heap = isBid ? bidsHeap : asksHeap;
 
     auto bIt = book.find(storedPriceTicks);
     if (bIt == book.end()) {
@@ -268,6 +348,11 @@ void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, s
 
     auto liquidity = std::get<2>(queueElement);
     auto take = std::min<std::int64_t>(liquidity, quantityLots);
+
+    if (quantityLots > liquidity) {
+        // TODO: log that requested SUBTRACT with Q > existing, warning for corrupt data.
+    }
+
     liquidity -= take;
 
     if (liquidity == 0) {
@@ -281,14 +366,10 @@ void PaperTradingSimulatorCore::onSubtract(Side side, std::int64_t priceTicks, s
     }
 }
 
-void PaperTradingSimulatorCore::onMatch(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                        std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
-
-void PaperTradingSimulatorCore::onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots,
-                                      std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource) {}
-
-void PaperTradingSimulatorCore::initFromL2Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                                                   std::vector<std::int64_t>& quantities) {
+void PaperTradingSimulatorCore::initFromL2Snapshot(const std::vector<Side>& sides,
+                                                   const std::vector<std::int64_t>& prices,
+                                                   const std::vector<std::int64_t>& quantities) {
+    clearState();
     auto N = sides.size();
     if ((N != prices.size()) || (N != quantities.size())) {
         throw std::runtime_error("All arrays must have the same size.");
@@ -316,10 +397,12 @@ void PaperTradingSimulatorCore::initFromL2Snapshot(std::vector<Side>& sides, std
     }
 }
 
-void PaperTradingSimulatorCore::initFromL3Snapshot(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                                                   std::vector<std::int64_t>& quantities,
-                                                   std::vector<std::int64_t>& orderIds,
-                                                   std::vector<std::int64_t>& traderIds) {
+void PaperTradingSimulatorCore::initFromL3Snapshot(const std::vector<Side>& sides,
+                                                   const std::vector<std::int64_t>& prices,
+                                                   const std::vector<std::int64_t>& quantities,
+                                                   const std::vector<std::int64_t>& orderIds,
+                                                   const std::vector<std::int64_t>& traderIds) {
+    clearState();
     auto N = sides.size();
     if ((N != prices.size()) || (N != quantities.size()) || (N != orderIds.size()) || (N != traderIds.size())) {
         throw std::runtime_error("All arrays must have the same size.");
@@ -356,6 +439,14 @@ void PaperTradingSimulatorCore::initFromL3Snapshot(std::vector<Side>& sides, std
 
         orderInfo.emplace(orderId, std::make_tuple(side, price, itNew));
     }
+}
+
+void PaperTradingSimulatorCore::clearState() {
+    bids.clear();
+    asks.clear();
+    bidsHeap = std::priority_queue<std::int64_t>();
+    asksHeap = std::priority_queue<std::int64_t>();
+    orderInfo.clear();
 }
 
 std::optional<std::int64_t> PaperTradingSimulatorCore::depthAt(Side side, std::int64_t priceTicks) const {
