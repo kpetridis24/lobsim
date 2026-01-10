@@ -17,6 +17,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(GNUInstallDirs)
 
+# ---- Dependencies ----
+find_package(ZLIB REQUIRED)
+
 # ---- Core library: simex_core ----
 # List sources explicitly (recommended). Add more files as you implement.
 set(SIMEX_CORE_SOURCES
@@ -49,6 +52,12 @@ endif()
 
 # (Optional) define for your codebase if you want
 target_compile_definitions(simex_core PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
+
+# ---- Temp/debug executable ----
+add_executable(simex_temp
+  cpp/src/temp.cpp
+)
+target_link_libraries(simex_temp PRIVATE simex::core ZLIB::ZLIB)
 
 # ---- Install rules for C++ consumers ----
 install(TARGETS simex_core
