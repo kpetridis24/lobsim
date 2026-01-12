@@ -106,13 +106,7 @@ endif()
 # ---- Python extension (pybind11) ----
 # This builds a module that will be imported as: `import simex._core`
 if(SIMEX_BUILD_PYTHON)
-  include(FetchContent)
-  FetchContent_Declare(
-    pybind11
-    GIT_REPOSITORY https://github.com/pybind/pybind11.git
-    GIT_TAG        v2.13.6
-  )
-  FetchContent_MakeAvailable(pybind11)
+  find_package(pybind11 CONFIG REQUIRED)
 
   # The pybind module target name can be anything; OUTPUT_NAME controls the filename.
   pybind11_add_module(simex_py MODULE
