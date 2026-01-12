@@ -1,13 +1,13 @@
 #pragma once
 
-#include "simex/lob_event.hpp"
-#include "simex/types.hpp"
+#include "lobsim/lob_event.hpp"
+#include "lobsim/types.hpp"
 
 #include <cstdint>
 #include <memory>
 #include <string>
 
-namespace simex::replay {
+namespace lobsim::replay {
 
 struct CoinapiCoinbaseBTCUSDTParquetSource {
 public:
@@ -20,4 +20,4 @@ private:
     std::unique_ptr<Impl> impl;
 };
 
-} // namespace simex::replay
+} // namespace lobsim::replay

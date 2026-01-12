@@ -1,6 +1,6 @@
 #pragma once
 
-#include "simex/types.hpp"
+#include "lobsim/types.hpp"
 
 #include <cstdint>
 #include <iostream>

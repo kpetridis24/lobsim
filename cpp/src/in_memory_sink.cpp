@@ -1,4 +1,4 @@
-#include "simex/in_memory_sink.hpp"
+#include "lobsim/in_memory_sink.hpp"
 
 void InMemoryLogSink::onFill(const FillRecord& r) {
     fills.push_back(r);

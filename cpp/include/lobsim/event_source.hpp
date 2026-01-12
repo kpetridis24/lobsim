@@ -1,7 +1,7 @@
 #pragma once
 
 #include <concepts>
-namespace simex::replay {
+namespace lobsim::replay {
 template <typename Source, typename RawEvent>
 concept IEventSource = requires(Source s, RawEvent& out) {
     { s.next(out) } -> std::same_as<bool>;
@@ -12,4 +12,4 @@ concept IResettableEventSource = requires(Source s) {
     { s.reset() } -> std::same_as<void>;
 };
 
-} // namespace simex::replay
+} // namespace lobsim::replay

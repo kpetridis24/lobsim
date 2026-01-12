@@ -1,5 +1,5 @@
 """
-simex: L3 replay + paper trading engine
+lobsim: L3 replay + paper trading engine
 """
 from __future__ import annotations
 import typing

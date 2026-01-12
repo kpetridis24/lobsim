@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace simex::replay {
+namespace lobsim::replay {
 
 enum class RoundingPolicy : std::uint8_t { Strict = 0, Nearest = 1, Floor = 2, Ceil = 3 };
 
@@ -115,4 +115,4 @@ private:
     }
 };
 
-}; // namespace simex::replay
+}; // namespace lobsim::replay

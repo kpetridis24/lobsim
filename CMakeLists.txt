@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(simex VERSION 0.1.0 LANGUAGES CXX)
+project(lobsim VERSION 0.1.0 LANGUAGES CXX)
 
 # ---- Options ----
-option(SIMEX_BUILD_TESTS  "Build C++ unit tests" ON)
-option(SIMEX_BUILD_PYTHON "Build Python extension module" ON)
-option(SIMEX_SHARED_CORE  "Build simex_core as a shared library" OFF)
+option(LOBSIM_BUILD_TESTS  "Build C++ unit tests" ON)
+option(LOBSIM_BUILD_PYTHON "Build Python extension module" ON)
+option(LOBSIM_SHARED_CORE  "Build lobsim_core as a shared library" OFF)
 
 # ---- C++ standard / global settings ----
 set(CMAKE_CXX_STANDARD 20)
@@ -22,24 +22,24 @@ find_package(ZLIB REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 find_package(Parquet CONFIG REQUIRED)
 
-# ---- Core library: simex_core ----
+# ---- Core library: lobsim_core ----
 # List sources explicitly (recommended). Add more files as you implement.
-set(SIMEX_CORE_SOURCES
+set(LOBSIM_CORE_SOURCES
   cpp/src/paper_trading_simulator_core.cpp
   cpp/src/in_memory_sink.cpp
 )
 
-add_library(simex_core ${SIMEX_CORE_SOURCES})
+add_library(lobsim_core ${LOBSIM_CORE_SOURCES})
 
-if(SIMEX_SHARED_CORE)
-  set_target_properties(simex_core PROPERTIES
+if(LOBSIM_SHARED_CORE)
+  set_target_properties(lobsim_core PROPERTIES
     TYPE SHARED
   )
 endif()
 
-add_library(simex::core ALIAS simex_core)
+add_library(lobsim::core ALIAS lobsim_core)
 
-target_include_directories(simex_core
+target_include_directories(lobsim_core
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -47,46 +47,46 @@ target_include_directories(simex_core
 
 # Warnings (keep reasonable; adjust later)
 if(MSVC)
-  target_compile_options(simex_core PRIVATE /W4 /permissive-)
+  target_compile_options(lobsim_core PRIVATE /W4 /permissive-)
 else()
-  target_compile_options(simex_core PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(lobsim_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # (Optional) define for your codebase if you want
-target_compile_definitions(simex_core PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(lobsim_core PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}")
 
-# (Keep simex_core free of heavy IO deps like Arrow/Parquet.)
+# (Keep lobsim_core free of heavy IO deps like Arrow/Parquet.)
 
 # ---- Arrow/Parquet IO library (optional for Python users) ----
-add_library(simex_parquet
+add_library(lobsim_parquet
   cpp/src/coinapi_coinbase_btcusdt_parquet_source.cpp
 )
-add_library(simex::parquet ALIAS simex_parquet)
+add_library(lobsim::parquet ALIAS lobsim_parquet)
 
-target_include_directories(simex_parquet
+target_include_directories(lobsim_parquet
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 if(MSVC)
-  target_compile_options(simex_parquet PRIVATE /W4 /permissive-)
+  target_compile_options(lobsim_parquet PRIVATE /W4 /permissive-)
 else()
-  target_compile_options(simex_parquet PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(lobsim_parquet PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-target_compile_definitions(simex_parquet PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
-target_link_libraries(simex_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
+target_compile_definitions(lobsim_parquet PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}")
+target_link_libraries(lobsim_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
 
-add_executable(simex_temp
+add_executable(lobsim_temp
   cpp/src/temp.cpp
 )
-target_link_libraries(simex_temp PRIVATE simex::core ZLIB::ZLIB Arrow::arrow_shared Parquet::parquet_shared)
+target_link_libraries(lobsim_temp PRIVATE lobsim::core ZLIB::ZLIB Arrow::arrow_shared Parquet::parquet_shared)
 
 
 # ---- Install rules for C++ consumers ----
-install(TARGETS simex_core simex_parquet
-  EXPORT simexTargets
+install(TARGETS lobsim_core lobsim_parquet
+  EXPORT lobsimTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -96,13 +96,13 @@ install(DIRECTORY cpp/include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(EXPORT simexTargets
-  NAMESPACE simex::
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/simex
+install(EXPORT lobsimTargets
+  NAMESPACE lobsim::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/lobsim
 )
 
 # ---- Tests (Catch2) ----
-if(SIMEX_BUILD_TESTS)
+if(LOBSIM_BUILD_TESTS)
   include(CTest)
 
   include(FetchContent)
@@ -113,41 +113,41 @@ if(SIMEX_BUILD_TESTS)
   )
   FetchContent_MakeAvailable(Catch2)
 
-  add_executable(simex_core_tests
+  add_executable(lobsim_core_tests
     cpp/tests/test_paper_trading_simulator_core.cpp
   )
-  target_link_libraries(simex_core_tests PRIVATE simex::core Catch2::Catch2WithMain)
+  target_link_libraries(lobsim_core_tests PRIVATE lobsim::core Catch2::Catch2WithMain)
 
   # Auto-discover tests for ctest
   include(Catch)
-  catch_discover_tests(simex_core_tests)
+  catch_discover_tests(lobsim_core_tests)
 endif()
 
 # ---- Python extension (pybind11) ----
-# This builds a module that will be imported as: `import simex._core`
-if(SIMEX_BUILD_PYTHON)
+# This builds a module that will be imported as: `import lobsim._core`
+if(LOBSIM_BUILD_PYTHON)
   find_package(pybind11 CONFIG REQUIRED)
 
   # The pybind module target name can be anything; OUTPUT_NAME controls the filename.
-  pybind11_add_module(simex_py MODULE
+  pybind11_add_module(lobsim_py MODULE
     cpp/src/python_bindings.cpp
   )
 
-  target_link_libraries(simex_py PRIVATE simex::core)
+  target_link_libraries(lobsim_py PRIVATE lobsim::core)
 
-  # Make the compiled module name "_core" so it imports as simex._core
-  set_target_properties(simex_py PROPERTIES
+  # Make the compiled module name "_core" so it imports as lobsim._core
+  set_target_properties(lobsim_py PROPERTIES
     OUTPUT_NAME "_core"
   )
 
-  # For local (non-wheel) builds, drop the module into python/simex/
+  # For local (non-wheel) builds, drop the module into python/lobsim/
   # For wheel builds, scikit-build-core will use CMAKE_INSTALL_PREFIX and install() rules.
-  set_target_properties(simex_py PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/python/simex"
+  set_target_properties(lobsim_py PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/python/lobsim"
   )
 
-  # Install into the Python package namespace "simex"
-  install(TARGETS simex_py
-    LIBRARY DESTINATION simex
+  # Install into the Python package namespace "lobsim"
+  install(TARGETS lobsim_py
+    LIBRARY DESTINATION lobsim
   )
 endif()

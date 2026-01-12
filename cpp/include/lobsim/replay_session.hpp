@@ -1,16 +1,16 @@
 #pragma once
 
-#include "simex/engine.hpp"
-#include "simex/event_adapter.hpp"
-#include "simex/event_source.hpp"
-#include "simex/lob_event.hpp"
+#include "lobsim/engine.hpp"
+#include "lobsim/event_adapter.hpp"
+#include "lobsim/event_source.hpp"
+#include "lobsim/lob_event.hpp"
 
 #include <cstdint>
 #include <span>
 #include <stdexcept>
 #include <string>
 
-namespace simex::replay {
+namespace lobsim::replay {
 
 struct ReplayConfig {
     bool requireMonotonicTsReceived{true};
@@ -120,4 +120,4 @@ private:
     std::int64_t lastTsReceived{0};
 };
 
-} // namespace simex::replay
+} // namespace lobsim::replay

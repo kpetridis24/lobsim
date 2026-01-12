@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug simex_temp",
+      "name": "Debug lobsim_temp",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/simex_temp",
+      "program": "${workspaceFolder}/build/lobsim_temp",
       "args": [],
       "stopAtEntry": true,
       "cwd": "${workspaceFolder}",
