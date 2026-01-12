@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Iterable, Protocol, Sequence, TypeVar
 
 from .engine import PaperTradingSimulatorCore
 from .lob_event import NormalizedLobEvent
@@ -27,8 +27,17 @@ class RunSummary:
     last_ts_received: int
 
 
+_RawT = TypeVar("_RawT")
+
+
+class AdapterLike(Protocol[_RawT]):
+    def __call__(self, raw: _RawT) -> NormalizedLobEvent: ...
+    def normalize(self, raw: _RawT) -> NormalizedLobEvent: ...
+
+
 class ReplaySession:
     def __init__(self, engine: PaperTradingSimulatorCore) -> None: ...
 
     def run(self, events: Sequence[NormalizedLobEvent], config: ReplayConfig = ...) -> RunSummary: ...
 
+    def run_raw(self, source: Iterable[_RawT], adapter: "AdapterLike[_RawT]", config: ReplayConfig = ...) -> RunSummary: ...
