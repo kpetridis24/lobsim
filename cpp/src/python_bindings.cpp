@@ -72,7 +72,63 @@ PYBIND11_MODULE(_core, m) {
                const simex::replay::ReplayConfig& cfg) {
                 return s.run(std::span<const NormalizedLobEvent>(events.data(), events.size()), cfg);
             },
-            py::arg("events"), py::arg("config") = simex::replay::ReplayConfig{});
+            py::arg("events"), py::arg("config") = simex::replay::ReplayConfig{})
+        .def(
+            "run_raw",
+            [](simex::replay::ReplaySession& s, py::object source, py::object adapter,
+               const simex::replay::ReplayConfig& cfg) {
+                std::uint64_t rawCount = 0;
+                std::uint64_t adapterFailures = 0;
+                std::vector<NormalizedLobEvent> normalized;
+                normalized.reserve(1024);
+
+                py::object callTarget = adapter;
+                if (py::hasattr(adapter, "normalize")) {
+                    callTarget = adapter.attr("normalize");
+                }
+                if (!PyCallable_Check(callTarget.ptr())) {
+                    throw std::runtime_error("ReplaySession.run_raw: adapter must be callable or have .normalize");
+                }
+
+                py::object iter = py::iter(source);
+                while (true) {
+                    py::object item = py::reinterpret_steal<py::object>(PyIter_Next(iter.ptr()));
+                    if (!item) {
+                        if (PyErr_Occurred()) {
+                            throw py::error_already_set();
+                        }
+                        break;
+                    }
+
+                    ++rawCount;
+                    try {
+                        py::object result = callTarget(item);
+                        NormalizedLobEvent ev = result.cast<NormalizedLobEvent>();
+                        normalized.push_back(std::move(ev));
+                    } catch (py::error_already_set& e) {
+                        ++adapterFailures;
+                        if (cfg.failFast) {
+                            throw;
+                        }
+                        PyErr_Clear();
+                        continue;
+                    } catch (const std::exception&) {
+                        ++adapterFailures;
+                        if (cfg.failFast) {
+                            throw;
+                        }
+                        PyErr_Clear();
+                        continue;
+                    }
+                }
+
+                auto summary = s.run(std::span<const NormalizedLobEvent>(normalized.data(), normalized.size()), cfg);
+                summary.numRawEvents = rawCount;
+                summary.numAdapterFailures = adapterFailures;
+                summary.numNormalizedEvents = static_cast<std::uint64_t>(normalized.size());
+                return summary;
+            },
+            py::arg("source"), py::arg("adapter"), py::arg("config") = simex::replay::ReplayConfig{});
 
     // Normalized event (handy for Python-driven loops)
     py::class_<NormalizedLobEvent>(m, "NormalizedLobEvent")
