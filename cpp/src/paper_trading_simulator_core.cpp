@@ -9,12 +9,10 @@
 /**
  * TODO:
  * 1. Design and implement logging/emitting of events.
- * 2. Perhaps use an internal order/event flag (monotonic seq) for reproducibility/determinism.
- * 3. For now, if a strategy wants to execute a market order, it should do it with an ADD call at
+ * 2. For now, if a strategy wants to execute a market order, it should do it with an ADD call at
  *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
  *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
- * 4. Add checks for out-of-limits values -> reject event completely.
- * 5. Implement l2TopN efficiently.
+ * 3. Add checks for out-of-limits values -> reject event completely.
  */
 
 void PaperTradingSimulatorCore::update(const NormalizedLobEvent& event) {
@@ -254,7 +252,6 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 
     if (queue.empty()) {
         book.erase(bIt);
-        // TODO: check if heap behaves properly after this, with stale entry.
     }
 
     orderInfo.erase(it);
