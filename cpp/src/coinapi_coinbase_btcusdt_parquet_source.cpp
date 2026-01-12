@@ -102,11 +102,11 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         }
         auto infile = *infile_res;
 
-        auto reader_res = parquet::arrow::OpenFile(infile, arrow::default_memory_pool());
-        if (!reader_res.ok()) {
-            throw std::runtime_error(reader_res.status().ToString());
+        std::unique_ptr<parquet::arrow::FileReader> reader;
+        auto st = parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader);
+        if (!st.ok()) {
+            throw std::runtime_error(st.ToString());
         }
-        std::unique_ptr<parquet::arrow::FileReader> reader = std::move(reader_res).ValueUnsafe();
         reader->set_batch_size(batchSizeRows);
 
         std::shared_ptr<arrow::Schema> schema;
@@ -161,11 +161,12 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         std::vector<int> cols{col_time_exchange, col_time_coinapi, col_update_type, col_is_buy,
                               col_entry_px,      col_entry_sx,     col_order_id};
 
-        auto rb_res = reader->GetRecordBatchReader(row_groups, cols);
-        if (!rb_res.ok()) {
-            throw std::runtime_error(rb_res.status().ToString());
+        std::shared_ptr<arrow::RecordBatchReader> rb_reader_local;
+        st = reader->GetRecordBatchReader(row_groups, cols, &rb_reader_local);
+        if (!st.ok()) {
+            throw std::runtime_error(st.ToString());
         }
-        rb_reader = std::move(rb_res).ValueUnsafe();
+        rb_reader = std::move(rb_reader_local);
     }
 
     bool loadNextBatch() {

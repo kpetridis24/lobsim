@@ -386,8 +386,8 @@ TEST_CASE("ADD with negative quantity is rejected") {
     sim.setLogSink(&sink);
     seed_l3(sim, {}, {}, {}, {}, {});
 
-    REQUIRE_THROWS_AS(sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, -5, 1, 11,
-                                            NoAggressorNeededSentinel, UpdateSource::HISTORICAL)),
+    REQUIRE_THROWS_AS(sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, -5, 1, 11, NoAggressorNeededSentinel,
+                                            UpdateSource::HISTORICAL)),
                       std::runtime_error);
 }
 
@@ -491,8 +491,8 @@ TEST_CASE("SUBTRACT/DELETE/MATCH targeting L2-seeded sentinel orderId are treate
     CHECK(depth.value() == 4); // unchanged
 
     // DELETE
-    sim.update(make_event(3, 4, Side::SELL, UpdateType::DELETE, 101, 0, UnknownOrderIdSentinel,
-                          UnknownTraderIdSentinel, NoAggressorNeededSentinel, UpdateSource::HISTORICAL));
+    sim.update(make_event(3, 4, Side::SELL, UpdateType::DELETE, 101, 0, UnknownOrderIdSentinel, UnknownTraderIdSentinel,
+                          NoAggressorNeededSentinel, UpdateSource::HISTORICAL));
     depth = sim.depthAt(Side::SELL, 101);
     REQUIRE(depth.has_value());
     CHECK(depth.value() == 4);

@@ -13,7 +13,10 @@ ReplayConfig.__signature__ = Signature(
     ]
 )
 ReplaySession.__signature__ = Signature(
-    parameters=[Parameter("engine", Parameter.POSITIONAL_OR_KEYWORD)]
+    parameters=[
+        Parameter("engine", Parameter.POSITIONAL_OR_KEYWORD),
+        Parameter("config", Parameter.POSITIONAL_OR_KEYWORD, default=ReplayConfig()),
+    ]
 )
 
 __all__ = ["ReplayConfig", "RunSummary", "ReplaySession"]
