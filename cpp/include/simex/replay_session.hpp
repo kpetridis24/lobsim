@@ -30,19 +30,28 @@ struct RunSummary {
 
 class ReplaySession {
 public:
-    explicit ReplaySession(IMatchingEngine& engine) : engine(engine) {}
+    explicit ReplaySession(IMatchingEngine& engine, ReplayConfig cfg = {}) : engine(engine), cfg(cfg) {}
+
+    void step(const NormalizedLobEvent& ev) {
+        if (ev.tsReceived < 0) {
+            throw std::runtime_error("ReplaySession: invalid tsReceived (< 0).");
+        }
+
+        if (cfg.requireMonotonicTsReceived && hasLastTsReceived && ev.tsReceived < lastTsReceived) {
+            throw std::runtime_error("ReplaySession: non-monotonic tsReceived detected.");
+        }
+        hasLastTsReceived = true;
+        lastTsReceived = ev.tsReceived;
+
+        engine.update(ev);
+    }
 
     RunSummary run(std::span<const NormalizedLobEvent> events, const ReplayConfig& cfg = {}) {
+        this->cfg = cfg;
         RunSummary summary{};
-        bool hasLast = false;
-        std::int64_t lastTs = 0;
 
         for (const auto& ev : events) {
             ++summary.numNormalizedEvents;
-
-            if (ev.tsReceived < 0) {
-                throw std::runtime_error("ReplaySession: invalid tsReceived (< 0).");
-            }
 
             if (!summary.hasTsRange) {
                 summary.hasTsRange = true;
@@ -56,16 +65,7 @@ public:
                     summary.lastTsReceived = ev.tsReceived;
                 }
             }
-
-            if (cfg.requireMonotonicTsReceived) {
-                if (hasLast && ev.tsReceived < lastTs) {
-                    throw std::runtime_error("ReplaySession: non-monotonic tsReceived detected.");
-                }
-                hasLast = true;
-                lastTs = ev.tsReceived;
-            }
-
-            engine.update(ev);
+            step(ev);
             ++summary.numEngineUpdates;
         }
         return summary;
@@ -74,9 +74,8 @@ public:
     template <typename Source, typename Adapter, typename RawEvent>
         requires IEventSource<Source, RawEvent> && IEventAdapter<Adapter, RawEvent>
     RunSummary run(Source& src, const Adapter& adapter, const ReplayConfig& cfg = {}) {
+        this->cfg = cfg;
         RunSummary summary{};
-        bool hasLast = false;
-        std::int64_t lastTs = 0;
 
         RawEvent raw{};
         while (src.next(raw)) {
@@ -107,16 +106,7 @@ public:
                     summary.lastTsReceived = ev.tsReceived;
                 }
             }
-
-            if (cfg.requireMonotonicTsReceived) {
-                if (hasLast && ev.tsReceived < lastTs) {
-                    throw std::runtime_error("ReplaySession: non-monotonic tsReceived detected.");
-                }
-                hasLast = true;
-                lastTs = ev.tsReceived;
-            }
-
-            engine.update(ev);
+            step(ev);
 
             ++summary.numEngineUpdates;
         }
@@ -125,6 +115,9 @@ public:
 
 private:
     IMatchingEngine& engine;
+    ReplayConfig cfg{};
+    bool hasLastTsReceived{false};
+    std::int64_t lastTsReceived{0};
 };
 
 } // namespace simex::replay

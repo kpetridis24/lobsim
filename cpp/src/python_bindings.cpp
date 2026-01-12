@@ -64,8 +64,11 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("last_ts_received", &simex::replay::RunSummary::lastTsReceived);
 
     py::class_<simex::replay::ReplaySession>(replay, "ReplaySession")
-        .def(py::init([](PaperTradingSimulatorCore& engine) { return simex::replay::ReplaySession(engine); }),
-             py::arg("engine"), py::keep_alive<1, 2>())
+        .def(py::init([](PaperTradingSimulatorCore& engine, const simex::replay::ReplayConfig& cfg) {
+                 return simex::replay::ReplaySession(engine, cfg);
+             }),
+             py::arg("engine"), py::arg("config") = simex::replay::ReplayConfig{}, py::keep_alive<1, 2>())
+        .def("step", &simex::replay::ReplaySession::step, py::arg("event"))
         .def(
             "run",
             [](simex::replay::ReplaySession& s, const std::vector<NormalizedLobEvent>& events,
@@ -212,7 +215,7 @@ PYBIND11_MODULE(_core, m) {
         // Ensure sink lifetime: sink stays alive as long as engine lives (Python-side).
         .def(
             "set_log_sink", [](PaperTradingSimulatorCore& eng, InMemoryLogSink& sink) { eng.setLogSink(&sink); },
-            py::keep_alive<1, 2>())
+            py::arg("sink"), py::keep_alive<1, 2>())
 
         // Apply a NormalizedLobEvent directly
         .def(
@@ -234,9 +237,11 @@ PYBIND11_MODULE(_core, m) {
             },
             py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("orderIds"), py::arg("traderIds"))
 
-        .def("depth_at", &PaperTradingSimulatorCore::depthAt)
+        .def("depth_at", &PaperTradingSimulatorCore::depthAt, py::arg("side"), py::arg("price_ticks"))
 
-        .def("l2_top_n", &PaperTradingSimulatorCore::l2TopN);
+        .def("l2_top_n", &PaperTradingSimulatorCore::l2TopN, py::arg("side"), py::arg("n"))
+
+        .def("get_best_price_ticks", &PaperTradingSimulatorCore::getBestPriceTicks, py::arg("side"));
 }
 
 #else

@@ -27,7 +27,6 @@ find_package(Parquet CONFIG REQUIRED)
 set(SIMEX_CORE_SOURCES
   cpp/src/paper_trading_simulator_core.cpp
   cpp/src/in_memory_sink.cpp
-  cpp/src/coinapi_coinbase_btcusdt_parquet_source.cpp
 )
 
 add_library(simex_core ${SIMEX_CORE_SOURCES})
@@ -56,7 +55,28 @@ endif()
 # (Optional) define for your codebase if you want
 target_compile_definitions(simex_core PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
 
-target_link_libraries(simex_core PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
+# (Keep simex_core free of heavy IO deps like Arrow/Parquet.)
+
+# ---- Arrow/Parquet IO library (optional for Python users) ----
+add_library(simex_parquet
+  cpp/src/coinapi_coinbase_btcusdt_parquet_source.cpp
+)
+add_library(simex::parquet ALIAS simex_parquet)
+
+target_include_directories(simex_parquet
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+if(MSVC)
+  target_compile_options(simex_parquet PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(simex_parquet PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+target_compile_definitions(simex_parquet PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
+target_link_libraries(simex_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
 
 add_executable(simex_temp
   cpp/src/temp.cpp
@@ -65,7 +85,7 @@ target_link_libraries(simex_temp PRIVATE simex::core ZLIB::ZLIB Arrow::arrow_sha
 
 
 # ---- Install rules for C++ consumers ----
-install(TARGETS simex_core
+install(TARGETS simex_core simex_parquet
   EXPORT simexTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
