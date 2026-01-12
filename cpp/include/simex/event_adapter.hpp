@@ -1,6 +1,6 @@
 #pragma once
 
-#include "simex/normalized_event.hpp"
+#include "simex/lob_event.hpp"
 
 #include <concepts>
 #include <iostream>
