@@ -1,5 +1,5 @@
 #pragma once
-#include "simex/log_sink.hpp"
+#include "lobsim/log_sink.hpp"
 
 #include <vector>
 

@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: simex
-Version: 0.1.0
-Summary: SIMEX Python bindings
-Author-email: SIMEX <devnull@example.com>
-Requires-Python: >=3.11

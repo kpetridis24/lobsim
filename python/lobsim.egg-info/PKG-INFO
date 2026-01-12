@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: lobsim
+Version: 0.1.0
+Summary: LOBSIM Python bindings
+Author-email: LOBSIM <devnull@example.com>
+Requires-Python: >=3.11

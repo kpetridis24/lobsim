@@ -3,8 +3,8 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
-name = "simex"
+name = "lobsim"
 version = "0.1.0"
-description = "SIMEX Python bindings"
-authors = [{ name = "SIMEX", email = "devnull@example.com" }]
+description = "LOBSIM Python bindings"
+authors = [{ name = "LOBSIM", email = "devnull@example.com" }]
 requires-python = ">=3.11"

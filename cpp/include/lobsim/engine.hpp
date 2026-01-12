@@ -1,6 +1,6 @@
 #pragma once
 
-#include "simex/lob_event.hpp"
+#include "lobsim/lob_event.hpp"
 #include "types.hpp"
 
 #include <cstdint>

@@ -1,5 +1,5 @@
-#include "simex/in_memory_sink.hpp"
-#include "simex/paper_trading_simulator_core.hpp"
+#include "lobsim/in_memory_sink.hpp"
+#include "lobsim/paper_trading_simulator_core.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>

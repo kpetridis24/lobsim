@@ -1,9 +1,9 @@
 #pragma once
 
-#include "simex/engine.hpp"
-#include "simex/event_adapter.hpp"
-#include "simex/instrument.hpp"
-#include "simex/lob_event.hpp"
+#include "lobsim/engine.hpp"
+#include "lobsim/event_adapter.hpp"
+#include "lobsim/instrument.hpp"
+#include "lobsim/lob_event.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-namespace simex::replay {
+namespace lobsim::replay {
 
 struct CoinapiCoinbaseBTCUSDTAdapter {
     explicit CoinapiCoinbaseBTCUSDTAdapter(InstrumentSpec spec) : spec_(std::move(spec)) {}
@@ -67,4 +67,4 @@ private:
 
 static_assert(IEventAdapter<CoinapiCoinbaseBTCUSDTAdapter, CoinapiCoinbaseBTCUSDTRawEvent>);
 
-} // namespace simex::replay
+} // namespace lobsim::replay

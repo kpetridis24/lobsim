@@ -1,9 +1,9 @@
 #if __has_include(<pybind11/pybind11.h>)
 
-#include "simex/lob_event.hpp"
-#include "simex/paper_trading_simulator_core.hpp"
-#include "simex/replay_session.hpp"
-#include "simex/types.hpp"
+#include "lobsim/lob_event.hpp"
+#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/replay_session.hpp"
+#include "lobsim/types.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -11,12 +11,12 @@
 #include <string>
 
 // CHANGE THIS include to your actual sink header
-#include "simex/in_memory_sink.hpp"
+#include "lobsim/in_memory_sink.hpp"
 
 namespace py = pybind11;
 
 PYBIND11_MODULE(_core, m) {
-    m.doc() = "simex: L3 replay + paper trading engine";
+    m.doc() = "lobsim: L3 replay + paper trading engine";
 
     // Types submodule to group enums/constants
     auto types = m.def_submodule("types", "Enums and sentinel constants");
@@ -43,43 +43,43 @@ PYBIND11_MODULE(_core, m) {
     // Replay submodule
     auto replay = m.def_submodule("replay", "Replay session utilities");
 
-    py::class_<simex::replay::ReplayConfig>(replay, "ReplayConfig")
+    py::class_<lobsim::replay::ReplayConfig>(replay, "ReplayConfig")
         .def(py::init([](bool requireMonotonicTsReceived, bool failFast) {
-                 simex::replay::ReplayConfig cfg{};
+                 lobsim::replay::ReplayConfig cfg{};
                  cfg.requireMonotonicTsReceived = requireMonotonicTsReceived;
                  cfg.failFast = failFast;
                  return cfg;
              }),
              py::arg("require_monotonic_ts_received") = true, py::arg("fail_fast") = true)
-        .def_readwrite("require_monotonic_ts_received", &simex::replay::ReplayConfig::requireMonotonicTsReceived)
-        .def_readwrite("fail_fast", &simex::replay::ReplayConfig::failFast);
+        .def_readwrite("require_monotonic_ts_received", &lobsim::replay::ReplayConfig::requireMonotonicTsReceived)
+        .def_readwrite("fail_fast", &lobsim::replay::ReplayConfig::failFast);
 
-    py::class_<simex::replay::RunSummary>(replay, "RunSummary")
-        .def_readonly("num_raw_events", &simex::replay::RunSummary::numRawEvents)
-        .def_readonly("num_normalized_events", &simex::replay::RunSummary::numNormalizedEvents)
-        .def_readonly("num_engine_updates", &simex::replay::RunSummary::numEngineUpdates)
-        .def_readonly("num_adapter_failures", &simex::replay::RunSummary::numAdapterFailures)
-        .def_readonly("has_ts_range", &simex::replay::RunSummary::hasTsRange)
-        .def_readonly("first_ts_received", &simex::replay::RunSummary::firstTsReceived)
-        .def_readonly("last_ts_received", &simex::replay::RunSummary::lastTsReceived);
+    py::class_<lobsim::replay::RunSummary>(replay, "RunSummary")
+        .def_readonly("num_raw_events", &lobsim::replay::RunSummary::numRawEvents)
+        .def_readonly("num_normalized_events", &lobsim::replay::RunSummary::numNormalizedEvents)
+        .def_readonly("num_engine_updates", &lobsim::replay::RunSummary::numEngineUpdates)
+        .def_readonly("num_adapter_failures", &lobsim::replay::RunSummary::numAdapterFailures)
+        .def_readonly("has_ts_range", &lobsim::replay::RunSummary::hasTsRange)
+        .def_readonly("first_ts_received", &lobsim::replay::RunSummary::firstTsReceived)
+        .def_readonly("last_ts_received", &lobsim::replay::RunSummary::lastTsReceived);
 
-    py::class_<simex::replay::ReplaySession>(replay, "ReplaySession")
-        .def(py::init([](PaperTradingSimulatorCore& engine, const simex::replay::ReplayConfig& cfg) {
-                 return simex::replay::ReplaySession(engine, cfg);
+    py::class_<lobsim::replay::ReplaySession>(replay, "ReplaySession")
+        .def(py::init([](PaperTradingSimulatorCore& engine, const lobsim::replay::ReplayConfig& cfg) {
+                 return lobsim::replay::ReplaySession(engine, cfg);
              }),
-             py::arg("engine"), py::arg("config") = simex::replay::ReplayConfig{}, py::keep_alive<1, 2>())
-        .def("step", &simex::replay::ReplaySession::step, py::arg("event"))
+             py::arg("engine"), py::arg("config") = lobsim::replay::ReplayConfig{}, py::keep_alive<1, 2>())
+        .def("step", &lobsim::replay::ReplaySession::step, py::arg("event"))
         .def(
             "run",
-            [](simex::replay::ReplaySession& s, const std::vector<NormalizedLobEvent>& events,
-               const simex::replay::ReplayConfig& cfg) {
+            [](lobsim::replay::ReplaySession& s, const std::vector<NormalizedLobEvent>& events,
+               const lobsim::replay::ReplayConfig& cfg) {
                 return s.run(std::span<const NormalizedLobEvent>(events.data(), events.size()), cfg);
             },
-            py::arg("events"), py::arg("config") = simex::replay::ReplayConfig{})
+            py::arg("events"), py::arg("config") = lobsim::replay::ReplayConfig{})
         .def(
             "run_raw",
-            [](simex::replay::ReplaySession& s, py::object source, py::object adapter,
-               const simex::replay::ReplayConfig& cfg) {
+            [](lobsim::replay::ReplaySession& s, py::object source, py::object adapter,
+               const lobsim::replay::ReplayConfig& cfg) {
                 std::uint64_t rawCount = 0;
                 std::uint64_t adapterFailures = 0;
                 std::vector<NormalizedLobEvent> normalized;
@@ -131,7 +131,7 @@ PYBIND11_MODULE(_core, m) {
                 summary.numNormalizedEvents = static_cast<std::uint64_t>(normalized.size());
                 return summary;
             },
-            py::arg("source"), py::arg("adapter"), py::arg("config") = simex::replay::ReplayConfig{});
+            py::arg("source"), py::arg("adapter"), py::arg("config") = lobsim::replay::ReplayConfig{});
 
     // Normalized event (handy for Python-driven loops)
     py::class_<NormalizedLobEvent>(m, "NormalizedLobEvent")
@@ -141,11 +141,11 @@ PYBIND11_MODULE(_core, m) {
                  return NormalizedLobEvent{tsEx,    tsRecv,   side,        ut,  priceTicks,         qtyLots,
                                            orderId, traderId, aggressorId, src, std::move(symbolId)};
              }),
-             py::arg("tsExchange") = 0, py::arg("tsReceived") = 0, py::arg_v("side", Side::BUY, "simex.types.Side.BUY"),
-             py::arg_v("updateType", UpdateType::ADD, "simex.types.UpdateType.ADD"), py::arg("priceTicks") = 0,
+             py::arg("tsExchange") = 0, py::arg("tsReceived") = 0, py::arg_v("side", Side::BUY, "lobsim.types.Side.BUY"),
+             py::arg_v("updateType", UpdateType::ADD, "lobsim.types.UpdateType.ADD"), py::arg("priceTicks") = 0,
              py::arg("quantityLots") = 0, py::arg("orderId") = UnknownOrderIdSentinel,
              py::arg("traderId") = UnknownTraderIdSentinel, py::arg("aggressorId") = NoAggressorNeededSentinel,
-             py::arg_v("updateSource", UpdateSource::HISTORICAL, "simex.types.UpdateSource.HISTORICAL"),
+             py::arg_v("updateSource", UpdateSource::HISTORICAL, "lobsim.types.UpdateSource.HISTORICAL"),
              py::arg("symbolId") = std::string{})
         .def_readwrite("tsExchange", &NormalizedLobEvent::tsExchange)
         .def_readwrite("tsReceived", &NormalizedLobEvent::tsReceived)

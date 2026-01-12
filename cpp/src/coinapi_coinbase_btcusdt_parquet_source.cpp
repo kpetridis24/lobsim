@@ -1,6 +1,6 @@
-#include "simex/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
 
-#include "simex/types.hpp"
+#include "lobsim/types.hpp"
 
 #include <arrow/api.h>
 #include <arrow/io/api.h>
@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-namespace simex::replay {
+namespace lobsim::replay {
 
 static UpdateType parseUpdateType(std::string_view s) {
     if (s == "SNAPSHOT")
@@ -302,4 +302,4 @@ bool CoinapiCoinbaseBTCUSDTParquetSource::next(CoinapiCoinbaseBTCUSDTRawEvent& o
     return impl->next(out);
 }
 
-} // namespace simex::replay
+} // namespace lobsim::replay

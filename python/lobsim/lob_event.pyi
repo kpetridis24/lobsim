@@ -14,13 +14,13 @@ class NormalizedLobEvent:
         self,
         tsExchange: int = 0,
         tsReceived: int = 0,
-        side = ...,  # simex.types.Side
-        updateType = ...,  # simex.types.UpdateType
+        side = ...,  # lobsim.types.Side
+        updateType = ...,  # lobsim.types.UpdateType
         priceTicks: int = 0,
         quantityLots: int = 0,
         orderId: int = ...,
         traderId: int = ...,
         aggressorId: int = ...,
-        updateSource = ...,  # simex.types.UpdateSource
+        updateSource = ...,  # lobsim.types.UpdateSource
         symbolId: str = "",
     ) -> None: ...
