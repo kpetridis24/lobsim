@@ -13,10 +13,7 @@ public:
     }
     ~PaperTradingSimulatorCore() = default;
 
-    void update(std::int64_t tsExchange, std::int64_t tsReceived, Side side, UpdateType updateType,
-                std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
-                std::int64_t traderId = UnknownTraderIdSentinel, std::int64_t aggressorId = NoAggressorNeededSentinel,
-                UpdateSource updateSource = UpdateSource::HISTORICAL) override;
+    void update(const NormalizedLobEvent& event) override;
 
     void initFromL2Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
                             const std::vector<std::int64_t>& quantities) override;
@@ -35,20 +32,13 @@ private:
     using OrderPriorityQueue = std::list<OrderTraderQuantitySource>;
     using Book = std::unordered_map<std::int64_t, OrderPriorityQueue>;
 
-    void onAdd(std::int64_t tsExchange, std::int64_t tsReceived, Side side, std::int64_t priceTicks,
-               std::int64_t quantityLots, std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource);
-    void onSubtract(std::int64_t tsExchange, std::int64_t tsReceived, Side side, std::int64_t priceTicks,
-                    std::int64_t quantityLots, std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource);
-    void onDelete(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
-                  std::int64_t traderId, UpdateSource updateSource);
-    void onMatch(std::int64_t tsExchange, std::int64_t tsReceived, Side side, std::int64_t priceTicks,
-                 std::int64_t quantityLots, std::int64_t orderId, std::int64_t traderId, UpdateSource updateSource);
-    void onSet(Side side, std::int64_t priceTicks, std::int64_t quantityLots, std::int64_t orderId,
-               std::int64_t traderId, UpdateSource updateSource);
+    void onAdd(const NormalizedLobEvent& event);
+    void onSubtract(const NormalizedLobEvent& event);
+    void onDelete(const NormalizedLobEvent& event);
+    void onMatch(const NormalizedLobEvent& event);
+    void onSet(const NormalizedLobEvent& event);
 
-    void onPartialOrderCancel(std::int64_t tsExchange, std::int64_t tsReceived, Side side, std::int64_t priceTicks,
-                              std::int64_t quantityLots, std::int64_t orderId, std::int64_t traderId,
-                              UpdateSource updateSource, bool isTradeOnPassiveOrder);
+    void onPartialOrderCancel(const NormalizedLobEvent& event, bool isTradeOnPassiveOrder);
 
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);

@@ -19,12 +19,15 @@ include(GNUInstallDirs)
 
 # ---- Dependencies ----
 find_package(ZLIB REQUIRED)
+find_package(Arrow CONFIG REQUIRED)
+find_package(Parquet CONFIG REQUIRED)
 
 # ---- Core library: simex_core ----
 # List sources explicitly (recommended). Add more files as you implement.
 set(SIMEX_CORE_SOURCES
   cpp/src/paper_trading_simulator_core.cpp
   cpp/src/in_memory_sink.cpp
+  cpp/src/coinapi_coinbase_btcusdt_parquet_source.cpp
 )
 
 add_library(simex_core ${SIMEX_CORE_SOURCES})
@@ -53,11 +56,13 @@ endif()
 # (Optional) define for your codebase if you want
 target_compile_definitions(simex_core PUBLIC SIMEX_VERSION="${PROJECT_VERSION}")
 
-# ---- Temp/debug executable ----
+target_link_libraries(simex_core PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
+
 add_executable(simex_temp
   cpp/src/temp.cpp
 )
-target_link_libraries(simex_temp PRIVATE simex::core ZLIB::ZLIB)
+target_link_libraries(simex_temp PRIVATE simex::core ZLIB::ZLIB Arrow::arrow_shared Parquet::parquet_shared)
+
 
 # ---- Install rules for C++ consumers ----
 install(TARGETS simex_core
