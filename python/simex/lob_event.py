@@ -1,8 +1,8 @@
-from ._core import lob_event as _lob_event
-from .types import Side, UpdateType, UpdateSource
+from ._core import NormalizedLobEvent as _NormalizedLobEvent
+from .types import Side, UpdateSource, UpdateType
 
 
-class NormalizedLobEvent(_lob_event.NormalizedLobEvent):
+class NormalizedLobEvent(_NormalizedLobEvent):
     def __init__(
         self,
         tsExchange: int = 0,

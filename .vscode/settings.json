@@ -9,5 +9,8 @@
   },
   "cmake.defaultBuildTarget": "simex_temp",
   "cmake.defaultLaunchTarget": "simex_temp",
-  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "python.analysis.extraPaths": [
+    "./python"
+  ]
 }

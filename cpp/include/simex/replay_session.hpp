@@ -6,6 +6,7 @@
 #include "simex/lob_event.hpp"
 
 #include <cstdint>
+#include <span>
 #include <stdexcept>
 #include <string>
 
@@ -30,6 +31,45 @@ struct RunSummary {
 class ReplaySession {
 public:
     explicit ReplaySession(IMatchingEngine& engine) : engine(engine) {}
+
+    RunSummary run(std::span<const NormalizedLobEvent> events, const ReplayConfig& cfg = {}) {
+        RunSummary summary{};
+        bool hasLast = false;
+        std::int64_t lastTs = 0;
+
+        for (const auto& ev : events) {
+            ++summary.numNormalizedEvents;
+
+            if (ev.tsReceived < 0) {
+                throw std::runtime_error("ReplaySession: invalid tsReceived (< 0).");
+            }
+
+            if (!summary.hasTsRange) {
+                summary.hasTsRange = true;
+                summary.firstTsReceived = ev.tsReceived;
+                summary.lastTsReceived = ev.tsReceived;
+            } else {
+                if (ev.tsReceived < summary.firstTsReceived) {
+                    summary.firstTsReceived = ev.tsReceived;
+                }
+                if (ev.tsReceived > summary.lastTsReceived) {
+                    summary.lastTsReceived = ev.tsReceived;
+                }
+            }
+
+            if (cfg.requireMonotonicTsReceived) {
+                if (hasLast && ev.tsReceived < lastTs) {
+                    throw std::runtime_error("ReplaySession: non-monotonic tsReceived detected.");
+                }
+                hasLast = true;
+                lastTs = ev.tsReceived;
+            }
+
+            engine.update(ev);
+            ++summary.numEngineUpdates;
+        }
+        return summary;
+    }
 
     template <typename Source, typename Adapter, typename RawEvent>
         requires IEventSource<Source, RawEvent> && IEventAdapter<Adapter, RawEvent>
@@ -76,8 +116,7 @@ public:
                 lastTs = ev.tsReceived;
             }
 
-            engine.update(ev.tsExchange, ev.tsReceived, ev.side, ev.updateType, ev.priceTicks, ev.quantityLots,
-                          ev.orderId, ev.traderId, ev.aggressorId, ev.updateSource);
+            engine.update(ev);
 
             ++summary.numEngineUpdates;
         }
