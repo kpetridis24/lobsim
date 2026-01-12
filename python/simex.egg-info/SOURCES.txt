@@ -1,4 +1,5 @@
 pyproject.toml
+setup.py
 simex/__init__.py
 simex/__init__.pyi
 simex/_core.cpython-311-darwin.so
@@ -7,6 +8,12 @@ simex/engine.py
 simex/engine.pyi
 simex/lob_event.py
 simex/lob_event.pyi
+simex/replay.py
+simex/replay.pyi
+simex/sink.py
+simex/sink.pyi
+simex/types.py
+simex/types.pyi
 simex.egg-info/PKG-INFO
 simex.egg-info/SOURCES.txt
 simex.egg-info/dependency_links.txt

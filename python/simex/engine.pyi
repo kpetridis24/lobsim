@@ -1,10 +1,19 @@
 from ._core import PaperTradingSimulatorCore
 
+from typing import Sequence
+
 from .sink import InMemoryLogSink
 from .lob_event import NormalizedLobEvent
+from .types import Side
 
 class PaperTradingSimulatorCore:
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        sides: Sequence[Side] | None = ...,
+        prices: Sequence[int] | None = ...,
+        quantities: Sequence[int] | None = ...,
+        sink: InMemoryLogSink | None = ...,
+    ) -> None: ...
     def set_log_sink(self, sink: InMemoryLogSink) -> None: ...
     def update(self, event: NormalizedLobEvent) -> None: ...
     def init_from_l2_snapshot(self, sides, prices, quantities) -> None: ...

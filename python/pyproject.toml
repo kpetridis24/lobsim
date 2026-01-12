@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name = "simex"
@@ -8,9 +8,3 @@ version = "0.1.0"
 description = "SIMEX Python bindings"
 authors = [{ name = "SIMEX", email = "devnull@example.com" }]
 requires-python = ">=3.11"
-
-[tool.setuptools.packages.find]
-where = ["."]
-
-[tool.setuptools.package-data]
-simex = ["*.pyi", "_core*.so"]
