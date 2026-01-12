@@ -1,0 +1,141 @@
+#if __has_include(<pybind11/pybind11.h>)
+
+#include "simex/lob_event.hpp"
+#include "simex/paper_trading_simulator_core.hpp"
+#include "simex/types.hpp"
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <string>
+
+// CHANGE THIS include to your actual sink header
+#include "simex/in_memory_sink.hpp"
+
+namespace py = pybind11;
+
+PYBIND11_MODULE(_core, m) {
+    m.doc() = "simex: L3 replay + paper trading engine";
+
+    // Types submodule to group enums/constants
+    auto types = m.def_submodule("types", "Enums and sentinel constants");
+
+    py::enum_<Side>(types, "Side").value("SELL", Side::SELL).value("BUY", Side::BUY);
+
+    py::enum_<UpdateType>(types, "UpdateType")
+        .value("ADD", UpdateType::ADD)
+        .value("DELETE", UpdateType::DELETE)
+        .value("SUBTRACT", UpdateType::SUBTRACT)
+        .value("MATCH", UpdateType::MATCH)
+        .value("SET", UpdateType::SET);
+
+    py::enum_<UpdateSource>(types, "UpdateSource")
+        .value("HISTORICAL", UpdateSource::HISTORICAL)
+        .value("STRATEGY", UpdateSource::STRATEGY);
+
+    // Sentinels
+    types.attr("UnknownOrderIdSentinel") = py::int_(UnknownOrderIdSentinel);
+    types.attr("UnknownTraderIdSentinel") = py::int_(UnknownTraderIdSentinel);
+    types.attr("UnknownAggressorIdSentinel") = py::int_(UnknownAggressorIdSentinel);
+    types.attr("NoAggressorNeededSentinel") = py::int_(NoAggressorNeededSentinel);
+
+    // Normalized event (handy for Python-driven loops)
+    py::class_<NormalizedLobEvent>(m, "NormalizedLobEvent")
+        .def(py::init([](std::int64_t tsEx, std::int64_t tsRecv, Side side, UpdateType ut, std::int64_t priceTicks,
+                         std::int64_t qtyLots, std::int64_t orderId, std::int64_t traderId, std::int64_t aggressorId,
+                         UpdateSource src, std::string symbolId) {
+                 return NormalizedLobEvent{tsEx,    tsRecv,   side,        ut,  priceTicks,         qtyLots,
+                                           orderId, traderId, aggressorId, src, std::move(symbolId)};
+             }),
+             py::arg("tsExchange") = 0, py::arg("tsReceived") = 0, py::arg_v("side", Side::BUY, "simex.types.Side.BUY"),
+             py::arg_v("updateType", UpdateType::ADD, "simex.types.UpdateType.ADD"), py::arg("priceTicks") = 0,
+             py::arg("quantityLots") = 0, py::arg("orderId") = UnknownOrderIdSentinel,
+             py::arg("traderId") = UnknownTraderIdSentinel, py::arg("aggressorId") = NoAggressorNeededSentinel,
+             py::arg_v("updateSource", UpdateSource::HISTORICAL, "simex.types.UpdateSource.HISTORICAL"),
+             py::arg("symbolId") = std::string{})
+        .def_readwrite("tsExchange", &NormalizedLobEvent::tsExchange)
+        .def_readwrite("tsReceived", &NormalizedLobEvent::tsReceived)
+        .def_readwrite("side", &NormalizedLobEvent::side)
+        .def_readwrite("updateType", &NormalizedLobEvent::updateType)
+        .def_readwrite("priceTicks", &NormalizedLobEvent::priceTicks)
+        .def_readwrite("quantityLots", &NormalizedLobEvent::quantityLots)
+        .def_readwrite("orderId", &NormalizedLobEvent::orderId)
+        .def_readwrite("traderId", &NormalizedLobEvent::traderId)
+        .def_readwrite("aggressorId", &NormalizedLobEvent::aggressorId)
+        .def_readwrite("updateSource", &NormalizedLobEvent::updateSource)
+        .def_readwrite("symbolId", &NormalizedLobEvent::symbolId);
+
+    // Sink bindings (assumes your sink exposes fills() -> const std::vector<FillEvent>&)
+    // If your names differ, keep the idea and adjust the method names/struct name.
+    py::class_<FillRecord>(m, "FillRecord")
+        .def_readonly("seq", &FillRecord::seq)
+        .def_readonly("tsExchange", &FillRecord::tsExchange)
+        .def_readonly("tsReceived", &FillRecord::tsReceived)
+        .def_readonly("priceTicks", &FillRecord::priceTicks)
+        .def_readonly("qtyLots", &FillRecord::qtyLots)
+        .def_readonly("makerSide", &FillRecord::makerSide)
+        .def_readonly("makerOrderId", &FillRecord::makerOrderId)
+        .def_readonly("makerTraderId", &FillRecord::makerTraderId)
+        .def_readonly("makerSource", &FillRecord::makerSource)
+        .def_readonly("takerSide", &FillRecord::takerSide)
+        .def_readonly("takerOrderId", &FillRecord::takerOrderId)
+        .def_readonly("takerTraderId", &FillRecord::takerTraderId)
+        .def_readonly("takerSource", &FillRecord::takerSource);
+
+    py::class_<EventApplyRecord>(m, "EventApplyRecord")
+        .def_readonly("seq", &EventApplyRecord::seq)
+        .def_readonly("tsExchange", &EventApplyRecord::tsExchange)
+        .def_readonly("tsReceived", &EventApplyRecord::tsReceived)
+        .def_readonly("side", &EventApplyRecord::side)
+        .def_readonly("updateType", &EventApplyRecord::updateType)
+        .def_readonly("source", &EventApplyRecord::source)
+        .def_readonly("priceTicks", &EventApplyRecord::priceTicks)
+        .def_readonly("qtyLots", &EventApplyRecord::qtyLots)
+        .def_readonly("orderId", &EventApplyRecord::orderId)
+        .def_readonly("traderId", &EventApplyRecord::traderId)
+        .def_readonly("aggressorId", &EventApplyRecord::aggressorId);
+
+    py::class_<InMemoryLogSink>(m, "InMemoryLogSink")
+        .def(py::init<>())
+        .def("reset", &InMemoryLogSink::reset)
+        .def("get_fills", [](const InMemoryLogSink& s) {
+            // return a copy so Python can hold it safely
+            return s.getFills();
+        });
+
+    // Engine bindings
+    py::class_<PaperTradingSimulatorCore>(m, "PaperTradingSimulatorCore")
+        .def(py::init<>())
+
+        // Ensure sink lifetime: sink stays alive as long as engine lives (Python-side).
+        .def(
+            "set_log_sink", [](PaperTradingSimulatorCore& eng, InMemoryLogSink& sink) { eng.setLogSink(&sink); },
+            py::keep_alive<1, 2>())
+
+        // Apply a NormalizedLobEvent directly
+        .def(
+            "update", [](PaperTradingSimulatorCore& eng, const NormalizedLobEvent& ev) { eng.update(ev); },
+            py::arg("event"))
+
+        .def(
+            "init_from_l2_snapshot",
+            [](PaperTradingSimulatorCore& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+               const std::vector<std::int64_t>& quantities) { eng.initFromL2Snapshot(sides, prices, quantities); },
+            py::arg("sides"), py::arg("prices"), py::arg("quantities"))
+
+        .def(
+            "init_from_l3_snapshot",
+            [](PaperTradingSimulatorCore& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+               const std::vector<std::int64_t>& quantities, const std::vector<std::int64_t>& orderIds,
+               const std::vector<std::int64_t>& traderIds) {
+                eng.initFromL3Snapshot(sides, prices, quantities, orderIds, traderIds);
+            },
+            py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("orderIds"), py::arg("traderIds"))
+
+        .def("depth_at", &PaperTradingSimulatorCore::depthAt)
+
+        .def("l2_top_n", &PaperTradingSimulatorCore::l2TopN);
+}
+
+#else
+#pragma message("pybind11 headers not found; python bindings are disabled for this configuration.")
+#endif

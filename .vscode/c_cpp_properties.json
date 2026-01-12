@@ -4,7 +4,8 @@
             "name": "Mac",
             "configurationProvider": "ms-vscode.cmake-tools",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/opt/homebrew/opt/python@3.14/Frameworks/Python.framework/Versions/3.14/include/python3.14"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",
