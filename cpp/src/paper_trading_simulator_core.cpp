@@ -13,6 +13,8 @@
  *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
  *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
  * 3. Add checks for out-of-limits values -> reject event completely.
+ * 4. Store ledger/sink for paper orders too.
+ * 5. L2 init cannot support exact paper order trading because we reject MODIFYs with orderIds not present
  */
 
 void PaperTradingSimulatorCore::update(const NormalizedLobEvent& event) {
@@ -57,7 +59,8 @@ void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
     const bool paper = event.updateSource == UpdateSource::STRATEGY;
     const bool isBid = event.side == Side::BUY;
 
-    if (orderInfo.contains(event.orderId)) {
+    if (orderInfo.contains(event.orderId) || paperOrders.contains(event.orderId) ||
+        paperOrderInfo.contains(event.orderId)) {
         // TODO: log duplicate orderId. Shouldn't happen on ADD
         return;
     }
@@ -143,6 +146,8 @@ void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
                     }
                 }
             } else {
+                std::int64_t tradedAtLevel = 0;
+                std::vector<std::pair<std::uint64_t, std::int64_t>> marketDeltas;
                 auto itNode = levelList.begin();
                 while (remaining > 0 && itNode != levelList.end()) {
                     auto& node = *itNode;
@@ -166,14 +171,30 @@ void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
                                                 event.traderId, event.updateSource});
                     }
 
+                    marketDeltas.emplace_back(std::get<4>(node), -take);
+
                     makerQty -= take;
                     remaining -= take;
+                    tradedAtLevel += take;
 
                     if (makerQty == 0) {
                         orderInfo.erase(makerOrderId);
                         itNode = levelList.erase(itNode);
                     } else {
                         ++itNode;
+                    }
+                }
+
+                if (tradedAtLevel > 0) {
+                    auto makerSide = event.side == Side::BUY ? Side::SELL : Side::BUY;
+                    applyPaperTradeAtLevel(makerSide, bestPx, tradedAtLevel, event);
+                    if (auto paperLevel = findPaperLevel(makerSide, bestPx)) {
+                        for (const auto& [seq, delta] : marketDeltas) {
+                            auto idxIt = paperLevel->marketIndexBySeq.find(seq);
+                            if (idxIt != paperLevel->marketIndexBySeq.end()) {
+                                paperLevel->marketQty.add(idxIt->second, delta);
+                            }
+                        }
                     }
                 }
 
@@ -184,20 +205,41 @@ void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
         }
     }
 
-    if (paper) {
-        // TODO: currently doesn't support keeping the paper order. In future maybe maintain it for future.
-        return;
-    }
-
     if (remaining > 0) {
-        auto& level = ownBook[event.priceTicks];
-        const bool newLevel = level.empty();
-        level.emplace_back(event.orderId, event.traderId, remaining, event.updateSource);
-        auto itNew = std::prev(level.end());
-        if (newLevel) {
-            ownHeap.push(isBid ? event.priceTicks : -event.priceTicks);
+        if (paper) {
+            auto& level = ensurePaperLevel(event.side, event.priceTicks);
+            PaperOrder order{};
+            order.originalEvent = event;
+            order.status = remaining < event.quantityLots ? PaperOrderStatus::PARTIALLY_FILLED : PaperOrderStatus::OPEN;
+            order.remainingQty = remaining;
+            order.placementSeq = orderArrivalSeq++;
+            const std::size_t paperIndex = level.nextPaperIndex++;
+            level.paperQty.ensureSize(level.nextPaperIndex);
+            level.paperQty.add(paperIndex, remaining);
+            order.paperIndex = paperIndex;
+            paperOrders.emplace(event.orderId, order);
+            level.orders.push_back(event.orderId);
+            auto itNew = std::prev(level.orders.end());
+            paperOrderInfo.emplace(event.orderId, std::make_tuple(event.side, event.priceTicks, itNew));
+            level.queuedLots += remaining;
+        } else {
+            auto& level = ownBook[event.priceTicks];
+            const bool newLevel = level.empty();
+            level.emplace_back(event.orderId, event.traderId, remaining, event.updateSource, orderArrivalSeq++);
+            auto itNew = std::prev(level.end());
+            if (newLevel) {
+                ownHeap.push(isBid ? event.priceTicks : -event.priceTicks);
+            }
+            orderInfo.emplace(event.orderId, std::make_tuple(event.side, event.priceTicks, itNew));
+            if (auto paperLevel = findPaperLevel(event.side, event.priceTicks)) {
+                const auto seq = std::get<4>(*itNew);
+                const std::size_t idx = paperLevel->marketSeqs.size();
+                paperLevel->marketSeqs.push_back(seq);
+                paperLevel->marketIndexBySeq.emplace(seq, idx);
+                paperLevel->marketQty.ensureSize(paperLevel->marketSeqs.size());
+                paperLevel->marketQty.add(idx, remaining);
+            }
         }
-        orderInfo.emplace(event.orderId, std::make_tuple(event.side, event.priceTicks, itNew));
     }
 }
 
@@ -215,11 +257,307 @@ PaperTradingSimulatorCore::bestOppositePrice(bool oppositeIsAsk, const Book& opp
     return std::nullopt;
 }
 
+PaperTradingSimulatorCore::PaperOrderLevel& PaperTradingSimulatorCore::ensurePaperLevel(Side side,
+                                                                                        std::int64_t priceTicks) {
+    auto& levels = side == Side::BUY ? paperBids : paperAsks;
+    auto [it, inserted] = levels.try_emplace(priceTicks);
+    if (inserted) {
+        auto& level = it->second;
+        const auto& book = side == Side::BUY ? bids : asks;
+        auto bookIt = book.find(priceTicks);
+        if (bookIt != book.end()) {
+            const auto& queue = bookIt->second;
+            level.marketSeqs.reserve(queue.size());
+            level.marketQty.ensureSize(queue.size());
+            std::size_t idx = 0;
+            for (const auto& node : queue) {
+                const auto seq = std::get<4>(node);
+                const auto qty = std::get<2>(node);
+                level.marketSeqs.push_back(seq);
+                level.marketIndexBySeq.emplace(seq, idx);
+                level.marketQty.ensureSize(idx + 1);
+                level.marketQty.add(idx, qty);
+                ++idx;
+            }
+        }
+    }
+    return it->second;
+}
+
+PaperTradingSimulatorCore::PaperOrderLevel* PaperTradingSimulatorCore::findPaperLevel(Side side,
+                                                                                      std::int64_t priceTicks) {
+    auto& levels = side == Side::BUY ? paperBids : paperAsks;
+    auto it = levels.find(priceTicks);
+    if (it == levels.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+void PaperTradingSimulatorCore::applyPaperTradeAtLevel(Side passiveSide, std::int64_t priceTicks,
+                                                       std::int64_t tradeLots, const NormalizedLobEvent& aggressor) {
+    if (tradeLots <= 0) {
+        return;
+    }
+
+    auto& levels = passiveSide == Side::BUY ? paperBids : paperAsks;
+    auto levelIt = levels.find(priceTicks);
+    if (levelIt == levels.end()) {
+        return;
+    }
+
+    auto& level = levelIt->second;
+    auto it = level.orders.begin();
+    std::int64_t marketConsumed = 0;
+    const auto marketAhead = [&](std::uint64_t placementSeq) {
+        if (level.marketSeqs.empty()) {
+            return std::int64_t{0};
+        }
+        const auto pos =
+            static_cast<std::size_t>(std::lower_bound(level.marketSeqs.begin(), level.marketSeqs.end(), placementSeq) -
+                                     level.marketSeqs.begin());
+        return level.marketQty.sum(pos);
+    };
+    while (it != level.orders.end() && tradeLots > 0) {
+        const auto orderId = *it;
+        auto orderIt = paperOrders.find(orderId);
+        if (orderIt == paperOrders.end()) {
+            it = level.orders.erase(it);
+            paperOrderInfo.erase(orderId);
+            continue;
+        }
+
+        auto& order = orderIt->second;
+        const auto totalMarketAhead = marketAhead(order.placementSeq);
+        const auto aheadMarket =
+            totalMarketAhead > marketConsumed ? (totalMarketAhead - marketConsumed) : std::int64_t{0};
+        const auto aheadPaper = level.paperQty.sum(order.paperIndex);
+        const auto queueAhead = aheadMarket + aheadPaper;
+        if (queueAhead >= tradeLots) {
+            break;
+        }
+        tradeLots -= queueAhead;
+        marketConsumed += aheadMarket;
+
+        if (order.remainingQty <= 0) {
+            auto next = std::next(it);
+            level.orders.erase(it);
+            paperOrderInfo.erase(orderId);
+            paperOrders.erase(orderIt);
+            it = next;
+            continue;
+        }
+
+        const auto fillQty = std::min(order.remainingQty, tradeLots);
+        if (fillQty <= 0) {
+            ++it;
+            continue;
+        }
+
+        if (sink) {
+            const bool eventIsAggressor = aggressor.updateType == UpdateType::ADD;
+            auto takerSide = passiveSide == Side::BUY ? Side::SELL : Side::BUY;
+            auto takerOrderId = eventIsAggressor ? aggressor.orderId : UnknownOrderIdSentinel;
+            auto takerTraderId = eventIsAggressor ? aggressor.traderId : UnknownTraderIdSentinel;
+            auto takerSource = aggressor.updateSource;
+
+            sink->onFill(FillRecord{seq, aggressor.tsExchange, aggressor.tsReceived, priceTicks, fillQty, passiveSide,
+                                    orderId, order.originalEvent.traderId, UpdateSource::STRATEGY, takerSide,
+                                    takerOrderId, takerTraderId, takerSource});
+        }
+
+        tradeLots -= fillQty;
+
+        if (fillQty < order.remainingQty) {
+            order.remainingQty -= fillQty;
+            level.queuedLots -= fillQty;
+            level.paperQty.add(order.paperIndex, -fillQty);
+            order.status = PaperOrderStatus::PARTIALLY_FILLED;
+            ++it;
+        } else {
+            auto next = std::next(it);
+            removePaperOrder(level, it, fillQty, PaperOrderStatus::FILLED);
+            it = next;
+        }
+    }
+
+    if (level.orders.empty()) {
+        levels.erase(levelIt);
+    }
+}
+
+void PaperTradingSimulatorCore::removePaperOrder(PaperOrderLevel& level, PaperOrderQueue::iterator it,
+                                                 std::int64_t removedQty, PaperOrderStatus status) {
+    const auto orderId = *it;
+    auto orderIt = paperOrders.find(orderId);
+    if (orderIt == paperOrders.end()) {
+        level.orders.erase(it);
+        paperOrderInfo.erase(orderId);
+        return;
+    }
+
+    auto& order = orderIt->second;
+    if (removedQty <= 0) {
+        removedQty = order.remainingQty;
+    }
+    if (removedQty <= 0) {
+        level.orders.erase(it);
+        paperOrderInfo.erase(orderId);
+        paperOrders.erase(orderIt);
+        return;
+    }
+    removedQty = std::min(removedQty, order.remainingQty);
+
+    order.remainingQty -= removedQty;
+    order.status = status;
+    level.queuedLots -= removedQty;
+    level.paperQty.add(order.paperIndex, -removedQty);
+
+    level.orders.erase(it);
+    paperOrderInfo.erase(orderId);
+    paperOrders.erase(orderIt);
+}
+
+void PaperTradingSimulatorCore::reducePaperOrder(std::int64_t orderId, std::int64_t reduceQty) {
+    if (reduceQty < 0) {
+        throw std::runtime_error("Negative quantityLots found.");
+    }
+    if (reduceQty == 0) {
+        return;
+    }
+
+    auto infoIt = paperOrderInfo.find(orderId);
+    if (infoIt == paperOrderInfo.end()) {
+        return;
+    }
+
+    auto storedSide = std::get<0>(infoIt->second);
+    auto storedPriceTicks = std::get<1>(infoIt->second);
+    auto queueLocationIt = std::get<2>(infoIt->second);
+    auto level = findPaperLevel(storedSide, storedPriceTicks);
+    if (!level) {
+        paperOrderInfo.erase(infoIt);
+        paperOrders.erase(orderId);
+        return;
+    }
+
+    auto orderIt = paperOrders.find(orderId);
+    if (orderIt == paperOrders.end()) {
+        level->orders.erase(queueLocationIt);
+        paperOrderInfo.erase(infoIt);
+        return;
+    }
+
+    auto& order = orderIt->second;
+    auto take = std::min(order.remainingQty, reduceQty);
+    if (take <= 0) {
+        return;
+    }
+
+    if (take >= order.remainingQty) {
+        removePaperOrder(*level, queueLocationIt, order.remainingQty, PaperOrderStatus::CANCELLED);
+        if (level->orders.empty()) {
+            auto& levels = storedSide == Side::BUY ? paperBids : paperAsks;
+            levels.erase(storedPriceTicks);
+        }
+        return;
+    }
+
+    order.remainingQty -= take;
+    level->queuedLots -= take;
+    level->paperQty.add(order.paperIndex, -take);
+}
+
+void PaperTradingSimulatorCore::setPaperOrder(std::int64_t orderId, std::int64_t newQty) {
+    if (newQty < 0) {
+        newQty = 0;
+    }
+
+    auto infoIt = paperOrderInfo.find(orderId);
+    if (infoIt == paperOrderInfo.end()) {
+        return;
+    }
+
+    auto storedSide = std::get<0>(infoIt->second);
+    auto storedPriceTicks = std::get<1>(infoIt->second);
+    auto queueLocationIt = std::get<2>(infoIt->second);
+    auto level = findPaperLevel(storedSide, storedPriceTicks);
+    if (!level) {
+        paperOrderInfo.erase(infoIt);
+        paperOrders.erase(orderId);
+        return;
+    }
+
+    auto orderIt = paperOrders.find(orderId);
+    if (orderIt == paperOrders.end()) {
+        level->orders.erase(queueLocationIt);
+        paperOrderInfo.erase(infoIt);
+        return;
+    }
+
+    auto& order = orderIt->second;
+    if (newQty == order.remainingQty) {
+        return;
+    }
+
+    if (newQty == 0) {
+        removePaperOrder(*level, queueLocationIt, order.remainingQty, PaperOrderStatus::CANCELLED);
+        if (level->orders.empty()) {
+            auto& levels = storedSide == Side::BUY ? paperBids : paperAsks;
+            levels.erase(storedPriceTicks);
+        }
+        return;
+    }
+
+    if (newQty < order.remainingQty) {
+        const auto delta = order.remainingQty - newQty;
+        order.remainingQty = newQty;
+        level->queuedLots -= delta;
+        level->paperQty.add(order.paperIndex, -delta);
+        return;
+    }
+
+    const auto delta = newQty - order.remainingQty;
+    order.remainingQty = newQty;
+    level->queuedLots += delta;
+    level->paperQty.add(order.paperIndex, delta);
+}
+
 void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
+    if (event.updateSource == UpdateSource::STRATEGY) {
+        auto it = paperOrderInfo.find(event.orderId);
+        if (it == paperOrderInfo.end()) {
+            // TODO: log DELETE on non-existing paper orderId.
+            return;
+        }
+        auto storedSide = std::get<0>(it->second);
+        auto storedPriceTicks = std::get<1>(it->second);
+        auto queueLocationIt = std::get<2>(it->second);
+        auto level = findPaperLevel(storedSide, storedPriceTicks);
+        if (!level) {
+            paperOrderInfo.erase(it);
+            paperOrders.erase(event.orderId);
+            return;
+        }
+
+        auto orderIt = paperOrders.find(event.orderId);
+        if (orderIt == paperOrders.end()) {
+            level->orders.erase(queueLocationIt);
+            paperOrderInfo.erase(it);
+            return;
+        }
+
+        removePaperOrder(*level, queueLocationIt, orderIt->second.remainingQty, PaperOrderStatus::CANCELLED);
+        if (level->orders.empty()) {
+            auto& levels = storedSide == Side::BUY ? paperBids : paperAsks;
+            levels.erase(storedPriceTicks);
+        }
+        return;
+    }
+
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
         // TODO: log DELETE on non-existing orderId.
-        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
         return;
     }
 
@@ -248,6 +586,16 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
     }
 
     OrderPriorityQueue& queue = bIt->second;
+    auto& queueElement = *queueLocationIt;
+    const auto arrivalSeq = std::get<4>(queueElement);
+    const auto removedQty = std::get<2>(queueElement);
+
+    if (auto level = findPaperLevel(storedSide, storedPriceTicks); level && removedQty > 0) {
+        auto idxIt = level->marketIndexBySeq.find(arrivalSeq);
+        if (idxIt != level->marketIndexBySeq.end()) {
+            level->marketQty.add(idxIt->second, -removedQty);
+        }
+    }
     queue.erase(queueLocationIt);
 
     if (queue.empty()) {
@@ -258,6 +606,10 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 }
 
 void PaperTradingSimulatorCore::onSubtract(const NormalizedLobEvent& event) {
+    if (event.updateSource == UpdateSource::STRATEGY) {
+        reducePaperOrder(event.orderId, event.quantityLots);
+        return;
+    }
     onPartialOrderCancel(event, false);
 }
 
@@ -266,13 +618,16 @@ void PaperTradingSimulatorCore::onMatch(const NormalizedLobEvent& event) {
 }
 
 void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
+    if (event.updateSource == UpdateSource::STRATEGY) {
+        setPaperOrder(event.orderId, event.quantityLots);
+        return;
+    }
     if (event.quantityLots < 0) {
         // TODO: log that set with negative liquidity was requested. Set to 0 for non-blocking behaviour.
     }
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
         // TODO: log SET on non-existing orderId.
-        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
         return;
     }
 
@@ -300,8 +655,17 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
 
     OrderPriorityQueue& queue = bIt->second;
     OrderTraderQuantitySource& queueElement = *queueLocationIt;
+    const auto arrivalSeq = std::get<4>(queueElement);
 
     auto newQuantity = event.quantityLots < 0 ? 0 : event.quantityLots;
+    const auto oldQuantity = std::get<2>(queueElement);
+    const auto delta = newQuantity - oldQuantity;
+    if (auto level = findPaperLevel(storedSide, storedPriceTicks); level && delta != 0) {
+        auto idxIt = level->marketIndexBySeq.find(arrivalSeq);
+        if (idxIt != level->marketIndexBySeq.end()) {
+            level->marketQty.add(idxIt->second, delta);
+        }
+    }
     if (newQuantity == 0) {
         queue.erase(queueLocationIt);
         if (queue.empty()) {
@@ -325,7 +689,6 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
         // TODO: log SUBTRACT on non-existing orderId.
-        // TODO: figure out how to handle paper orders in the future (no they aren't stored).
         return;
     }
 
@@ -364,6 +727,19 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
     }
 
     liquidity -= take;
+
+    const auto arrivalSeq = std::get<4>(queueElement);
+    if (take > 0) {
+        if (isTradeOnPassiveOrder) {
+            applyPaperTradeAtLevel(storedSide, storedPriceTicks, take, event);
+        }
+        if (auto level = findPaperLevel(storedSide, storedPriceTicks)) {
+            auto idxIt = level->marketIndexBySeq.find(arrivalSeq);
+            if (idxIt != level->marketIndexBySeq.end()) {
+                level->marketQty.add(idxIt->second, -take);
+            }
+        }
+    }
 
     if (isTradeOnPassiveOrder && sink) {
         auto takerSide = storedSide == Side::BUY ? Side::SELL : Side::BUY;
@@ -410,7 +786,7 @@ void PaperTradingSimulatorCore::initFromL2Snapshot(const std::vector<Side>& side
         int sign = isBid ? 1 : -1;
 
         OrderTraderQuantitySource otq{UnknownOrderIdSentinel, UnknownTraderIdSentinel, quantity,
-                                      UpdateSource::HISTORICAL};
+                                      UpdateSource::HISTORICAL, orderArrivalSeq++};
 
         if (book.find(price) != book.end()) {
             throw std::runtime_error("Duplicate price found. Initializing from L2 snapshot requires volumes to be "
@@ -454,7 +830,7 @@ void PaperTradingSimulatorCore::initFromL3Snapshot(const std::vector<Side>& side
         const bool newLevel = priorityQueue.empty();
 
         // Append order at end (FIFO)
-        priorityQueue.emplace_back(orderId, traderId, quantity, UpdateSource::HISTORICAL);
+        priorityQueue.emplace_back(orderId, traderId, quantity, UpdateSource::HISTORICAL, orderArrivalSeq++);
         auto itNew = std::prev(priorityQueue.end());
 
         // Only push price into heap the first time the level appears
@@ -472,6 +848,11 @@ void PaperTradingSimulatorCore::clearState() {
     bidsHeap = std::priority_queue<std::int64_t>();
     asksHeap = std::priority_queue<std::int64_t>();
     orderInfo.clear();
+    paperOrders.clear();
+    paperOrderInfo.clear();
+    paperBids.clear();
+    paperAsks.clear();
+    orderArrivalSeq = 0;
     if (sink) {
         sink->reset();
     }
