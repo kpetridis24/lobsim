@@ -22,6 +22,16 @@ static std::int64_t sum_fill_qty(const std::vector<FillRecord>& fills) {
     return s;
 }
 
+static std::vector<FillRecord> strategy_maker_fills(const std::vector<FillRecord>& fills) {
+    std::vector<FillRecord> out;
+    for (const auto& f : fills) {
+        if (f.makerSource == UpdateSource::STRATEGY) {
+            out.push_back(f);
+        }
+    }
+    return out;
+}
+
 void seed_l3(PaperTradingSimulatorCore& sim, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
              const std::vector<std::int64_t>& qtys, const std::vector<std::int64_t>& orderIds,
              const std::vector<std::int64_t>& traderIds) {
@@ -450,6 +460,691 @@ TEST_CASE("Paper sweep does not double-count liquidity when heap has duplicate p
     auto d = sim.depthAt(Side::SELL, 100);
     REQUIRE(d.has_value());
     CHECK(d.value() == 5);
+}
+
+TEST_CASE("Paper order fills after trades exceed market ahead") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 10, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 100, 12, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Multiple paper orders fill FIFO when trade volume is sufficient") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 1, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 1, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 10, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 12, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 2);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 1);
+    CHECK(strat[1].makerOrderId == 9002);
+    CHECK(strat[1].qtyLots == 1);
+}
+
+TEST_CASE("Canceling a market order behind paper does not advance paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::DELETE, 100, 0, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 5, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Canceling a market order ahead advances paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::DELETE, 100, 0, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 2, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Paper partial fill persists and completes on later trades") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 3, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 1, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 100, 6, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+    auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].qtyLots == 1);
+
+    sim.update(make_event(7, 8, Side::BUY, UpdateType::ADD, 100, 2, 1003, 503, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+    sink.reset();
+    sim.update(make_event(9, 10, Side::SELL, UpdateType::ADD, 100, 2, 2002, 602, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].qtyLots == 2);
+    CHECK(strat[0].makerOrderId == 9001);
+}
+
+TEST_CASE("Paper SUBTRACT reduces size used for future fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 4, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 4, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SUBTRACT, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 9, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Paper DELETE removes order and prevents future fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::DELETE, 100, 0, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 10, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper fills work on the ask side too") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::SELL}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::SELL, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::SELL, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 12, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Paper order ahead of later market orders fills at an initially empty level") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {}, {}, {}, {}, {});
+
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Paper orders respect interleaved market orders in queue priority") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {3}, {1001}, {501});
+
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 2, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 2, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(7, 8, Side::BUY, UpdateType::ADD, 100, 2, 1003, 503, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(9, 10, Side::SELL, UpdateType::ADD, 100, 7, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Market SUBTRACT ahead advances paper while preserving priority") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SUBTRACT, 100, 3, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 5, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Market SET behind does not advance paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, 1, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 5, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper SET increases size used for later fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {2}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 1, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, 3, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 6, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 3);
+}
+
+TEST_CASE("Paper SUBTRACT beyond remaining cancels and prevents fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SUBTRACT, 100, 5, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 6, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper SET to zero cancels and prevents fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, 0, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 6, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("MATCH ahead advances paper for later trades") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::MATCH, 100, 3, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 1);
+}
+
+TEST_CASE("MATCH behind does not advance paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::MATCH, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 2, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("SET ahead increase pushes paper back") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {2}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, 5, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 4, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("SET ahead decrease advances paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, 1, 1001, 501, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("SUBTRACT behind does not advance paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {5}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SUBTRACT, 100, 2, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 2, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper partial fill blocks later paper when volume is insufficient") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 10, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Canceling first paper advances second paper") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 2, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(7, 8, Side::BUY, UpdateType::DELETE, 100, 0, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(9, 10, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9002);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Increasing first paper delays second paper fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 1, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 2, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(7, 8, Side::BUY, UpdateType::SET, 100, 3, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(9, 10, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
+}
+
+TEST_CASE("Decreasing first paper advances second paper fills") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 3, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 2, 9002, 902, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(7, 8, Side::BUY, UpdateType::SET, 100, 1, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(9, 10, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 2);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 1);
+    CHECK(strat[1].makerOrderId == 9002);
+    CHECK(strat[1].qtyLots == 1);
+}
+
+TEST_CASE("Paper ADD with qty 0 is ignored") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 0, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper SUBTRACT with negative qty throws") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    REQUIRE_THROWS_AS(sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, -1, 9001, 901,
+                                            NoAggressorNeededSentinel, UpdateSource::STRATEGY)),
+                      std::runtime_error);
+}
+
+TEST_CASE("Paper SET with negative qty cancels order") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::SET, 100, -5, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Duplicate paper ADD is ignored") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY}, {100}, {1}, {1001}, {501});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 3, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(5, 6, Side::BUY, UpdateType::ADD, 100, 5, 1002, 502, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 4, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(sum_fill_qty(strat) == 2);
+}
+
+TEST_CASE("ensurePaperLevel builds from existing market book") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY, Side::BUY}, {100, 100}, {2, 2}, {1001, 1002}, {501, 502});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+
+    sink.reset();
+    sim.update(make_event(3, 4, Side::SELL, UpdateType::ADD, 100, 3, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    CHECK(strat.empty());
+}
+
+TEST_CASE("Paper orders only fill at their own price level") {
+    PaperTradingSimulatorCore sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {Side::BUY, Side::BUY}, {101, 100}, {2, 1}, {1001, 1002}, {501, 502});
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 2, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 2, 1003, 503, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    sink.reset();
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 101, 2, 2001, 601, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+    CHECK(strategy_maker_fills(sink.getFills()).empty());
+
+    sink.reset();
+    sim.update(make_event(7, 8, Side::SELL, UpdateType::ADD, 100, 3, 2002, 602, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto strat = strategy_maker_fills(sink.getFills());
+    REQUIRE(strat.size() == 1);
+    CHECK(strat[0].makerOrderId == 9001);
+    CHECK(strat[0].qtyLots == 2);
 }
 
 TEST_CASE("L2-seeded liquidity (orderId sentinel) can be consumed and emits fills with sentinel maker") {

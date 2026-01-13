@@ -54,8 +54,20 @@ private:
         std::vector<std::int64_t> tree{};
 
         void ensureSize(std::size_t n) {
-            if (tree.size() < n + 1) {
-                tree.resize(n + 1, 0);
+            const std::size_t needed = n + 1;
+            if (tree.size() >= needed) {
+                return;
+            }
+            const std::size_t oldSize = tree.size();
+            tree.resize(needed, 0);
+            for (std::size_t i = oldSize; i < tree.size(); ++i) {
+                if (i == 0) {
+                    continue;
+                }
+                const std::size_t parent = i - (i & -i);
+                const std::int64_t prefix = sum(i - 1);
+                const std::int64_t prefixParent = sum(parent);
+                tree[i] = prefix - prefixParent;
             }
         }
 

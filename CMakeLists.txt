@@ -78,12 +78,6 @@ endif()
 target_compile_definitions(lobsim_parquet PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}")
 target_link_libraries(lobsim_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
 
-add_executable(lobsim_temp
-  cpp/src/temp.cpp
-)
-target_link_libraries(lobsim_temp PRIVATE lobsim::core ZLIB::ZLIB Arrow::arrow_shared Parquet::parquet_shared)
-
-
 # ---- Install rules for C++ consumers ----
 install(TARGETS lobsim_core lobsim_parquet
   EXPORT lobsimTargets
