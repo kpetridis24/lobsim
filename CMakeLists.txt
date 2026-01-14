@@ -150,3 +150,6 @@ endif()
 # ---- Examples ----
 add_executable(lobsim_cpp_example examples/lobsim_cpp.cpp)
 target_link_libraries(lobsim_cpp_example PRIVATE lobsim::core lobsim::parquet)
+
+add_executable(lobsim_lobster_example examples/lobsim_lobster_cpp.cpp)
+target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
