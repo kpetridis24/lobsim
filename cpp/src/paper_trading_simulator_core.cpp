@@ -422,17 +422,17 @@ void PaperTradingSimulatorCore::removePaperOrder(PaperOrderLevel& level, PaperOr
     paperOrders.erase(orderIt);
 }
 
-void PaperTradingSimulatorCore::reducePaperOrder(std::int64_t orderId, std::int64_t reduceQty) {
-    if (reduceQty < 0) {
-        emitDiagnostic(NormalizedLobEvent{}, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY,
+void PaperTradingSimulatorCore::reducePaperOrder(const NormalizedLobEvent& event) {
+    if (event.quantityLots < 0) {
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY,
                        DiagnosticRecordSeverity::ERROR);
         return;
     }
-    if (reduceQty == 0) {
+    if (event.quantityLots == 0) {
         return;
     }
 
-    auto infoIt = paperOrderInfo.find(orderId);
+    auto infoIt = paperOrderInfo.find(event.orderId);
     if (infoIt == paperOrderInfo.end()) {
         return;
     }
@@ -443,11 +443,11 @@ void PaperTradingSimulatorCore::reducePaperOrder(std::int64_t orderId, std::int6
     auto level = findPaperLevel(storedSide, storedPriceTicks);
     if (!level) {
         paperOrderInfo.erase(infoIt);
-        paperOrders.erase(orderId);
+        paperOrders.erase(event.orderId);
         return;
     }
 
-    auto orderIt = paperOrders.find(orderId);
+    auto orderIt = paperOrders.find(event.orderId);
     if (orderIt == paperOrders.end()) {
         level->orders.erase(queueLocationIt);
         paperOrderInfo.erase(infoIt);
@@ -455,7 +455,7 @@ void PaperTradingSimulatorCore::reducePaperOrder(std::int64_t orderId, std::int6
     }
 
     auto& order = orderIt->second;
-    auto take = std::min(order.remainingQty, reduceQty);
+    auto take = std::min(order.remainingQty, event.quantityLots);
     if (take <= 0) {
         return;
     }
@@ -619,7 +619,7 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 
 void PaperTradingSimulatorCore::onSubtract(const NormalizedLobEvent& event) {
     if (event.updateSource == UpdateSource::STRATEGY) {
-        reducePaperOrder(event.orderId, event.quantityLots);
+        reducePaperOrder(event);
         return;
     }
     onPartialOrderCancel(event, false);
@@ -697,7 +697,7 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
 
 void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& event, bool isTradeOnPassiveOrder) {
     if (event.quantityLots < 0) {
-        emitDiagnostic(NormalizedLobEvent{}, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
                        DiagnosticRecordSeverity::ERROR);
         return;
     }

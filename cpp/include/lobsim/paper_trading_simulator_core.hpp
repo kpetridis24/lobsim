@@ -114,7 +114,7 @@ private:
                                 const NormalizedLobEvent& aggressor);
     void removePaperOrder(PaperOrderLevel& level, PaperOrderQueue::iterator it, std::int64_t removedQty,
                           PaperOrderStatus status);
-    void reducePaperOrder(std::int64_t orderId, std::int64_t reduceQty);
+    void reducePaperOrder(const NormalizedLobEvent& event);
     void setPaperOrder(std::int64_t orderId, std::int64_t newQty);
 
     void clearState();
