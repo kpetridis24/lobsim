@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Format (C++/Python)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: |
+          brew update
+          brew install llvm 
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: C++ format check (clang-format)
+        run: |
+          clang-format --version
+          scripts/format_cpp.sh
+          git diff --exit-code
+
+      - name: Python format check (ruff)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff
+          ruff format --check python/lobsim
+
+  cpp-tests:
+    name: Build + C++ tests
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          brew update
+          brew install cmake ninja pybind11 apache-arrow
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLOBSIM_BUILD_PYTHON=OFF \
+            -DLOBSIM_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  python-build:
+    name: Build + import Python bindings
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: |
+          brew update
+          brew install cmake ninja pybind11 apache-arrow
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLOBSIM_BUILD_PYTHON=ON \
+            -DLOBSIM_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Install editable Python package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e python
+
+      - name: Smoke import
+        run: python -c "import lobsim; import lobsim._core; print('lobsim import OK')"
