@@ -47,10 +47,12 @@ class InMemoryLogSink final : public ILogSink {
 public:
     void onFill(const FillRecord& r) override;
     void onEventApply(const EventApplyRecord& r) override;
+    void onDiagnostic(const DiagnosticRecord& r) override;
     void reset() override;
 
     const std::vector<FillRecord>& getFills() const;
     const std::vector<EventApplyRecord>& getEvents() const;
+    const std::vector<DiagnosticRecord>& getDiagnostics() const;
     const std::unordered_map<std::int64_t, PaperOrderLedgerEntry>& getPaperLedger() const;
     const PaperOrderLedgerEntry* findPaperOrder(std::int64_t orderId) const;
     const std::vector<EventApplyRecord>& getRejectedStrategyEvents() const;
@@ -59,12 +61,12 @@ public:
     std::vector<EventApplyRecord> drainEvents();
 
 private:
-    void applyStrategyFill(std::int64_t orderId, UpdateSource source, PaperOrderFillRole role,
-                           const FillRecord& r);
+    void applyStrategyFill(std::int64_t orderId, UpdateSource source, PaperOrderFillRole role, const FillRecord& r);
     void updateStrategyOrder(const EventApplyRecord& r);
 
     std::vector<FillRecord> fills;
     std::vector<EventApplyRecord> events;
+    std::vector<DiagnosticRecord> diagnostics;
     std::unordered_map<std::int64_t, PaperOrderLedgerEntry> paperLedger;
     std::vector<EventApplyRecord> rejectedStrategyEvents;
 };

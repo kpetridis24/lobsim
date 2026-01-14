@@ -103,6 +103,7 @@ private:
     void onSet(const NormalizedLobEvent& event);
 
     void onPartialOrderCancel(const NormalizedLobEvent& event, bool isTradeOnPassiveOrder);
+    void emitDiagnostic(const NormalizedLobEvent& event, DiagnosticRecordCode code, DiagnosticRecordSeverity severity);
 
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);
@@ -113,7 +114,7 @@ private:
                                 const NormalizedLobEvent& aggressor);
     void removePaperOrder(PaperOrderLevel& level, PaperOrderQueue::iterator it, std::int64_t removedQty,
                           PaperOrderStatus status);
-    void reducePaperOrder(std::int64_t orderId, std::int64_t reduceQty);
+    void reducePaperOrder(const NormalizedLobEvent& event);
     void setPaperOrder(std::int64_t orderId, std::int64_t newQty);
 
     void clearState();
