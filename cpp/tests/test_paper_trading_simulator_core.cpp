@@ -42,8 +42,8 @@ static const DiagnosticRecord* last_diagnostic(const InMemoryLogSink& sink) {
     return &diags.back();
 }
 
-static void assert_diag_matches_event(const DiagnosticRecord& diag, const EventApplyRecord& ev,
-                                      DiagnosticRecordCode code, DiagnosticRecordSeverity severity) {
+static void assert_diagnostic_matches_event(const DiagnosticRecord& diag, const EventApplyRecord& ev,
+                                            DiagnosticRecordCode code, DiagnosticRecordSeverity severity) {
     CHECK(diag.code == code);
     CHECK(diag.severity == severity);
     CHECK(diag.seq == ev.seq);
@@ -51,14 +51,14 @@ static void assert_diag_matches_event(const DiagnosticRecord& diag, const EventA
     CHECK(diag.tsReceived == ev.tsReceived);
 }
 
-static void assert_last_diag_matches_event(const InMemoryLogSink& sink, DiagnosticRecordCode code,
-                                           DiagnosticRecordSeverity severity) {
+static void assert_last_diagnostic_matches_event(const InMemoryLogSink& sink, DiagnosticRecordCode code,
+                                                 DiagnosticRecordSeverity severity) {
     const auto* diag = last_diagnostic(sink);
     REQUIRE(diag != nullptr);
     const auto& events = sink.getEvents();
     REQUIRE_FALSE(events.empty());
     const auto& ev = events.back();
-    assert_diag_matches_event(*diag, ev, code, severity);
+    assert_diagnostic_matches_event(*diag, ev, code, severity);
 }
 
 void seed_l3(PaperTradingSimulatorCore& sim, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
@@ -427,8 +427,8 @@ TEST_CASE("ADD with negative quantity emits diagnostic") {
 
     sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, -5, 1, 11, NoAggressorNeededSentinel,
                           UpdateSource::HISTORICAL));
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY,
-                                   DiagnosticRecordSeverity::ERROR);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY,
+                                         DiagnosticRecordSeverity::ERROR);
 }
 
 TEST_CASE("Stale heap entry is popped and does not prevent matching next level") {
@@ -1088,8 +1088,8 @@ TEST_CASE("Paper SUBTRACT with negative qty emits diagnostic") {
 
     sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, -1, 9001, 901, NoAggressorNeededSentinel,
                           UpdateSource::STRATEGY));
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY,
-                                   DiagnosticRecordSeverity::ERROR);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY,
+                                         DiagnosticRecordSeverity::ERROR);
 }
 
 TEST_CASE("Paper SET with negative qty cancels order") {
@@ -1251,7 +1251,8 @@ TEST_CASE("update with unknown UpdateType emits diagnostic") {
 
     sim.update(make_event(1, 2, Side::BUY, static_cast<UpdateType>(999), 100, 1, 1, 1, NoAggressorNeededSentinel,
                           UpdateSource::HISTORICAL));
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::INVALID_UPDATE_TYPE, DiagnosticRecordSeverity::ERROR);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::INVALID_UPDATE_TYPE,
+                                         DiagnosticRecordSeverity::ERROR);
 }
 
 TEST_CASE("SUBTRACT reduces quantity without emitting fills") {
@@ -1311,14 +1312,14 @@ TEST_CASE("SUBTRACT with qty 0 and negative qty emit diagnostics") {
     auto depth = sim.depthAt(Side::BUY, 100);
     REQUIRE(depth.has_value());
     CHECK(depth.value() == 4);
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
-                                   DiagnosticRecordSeverity::WARNING);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
+                                         DiagnosticRecordSeverity::WARNING);
 
     sink.reset();
     sim.update(make_event(3, 4, Side::BUY, UpdateType::SUBTRACT, 100, -1, 1, 1, NoAggressorNeededSentinel,
                           UpdateSource::HISTORICAL));
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
-                                   DiagnosticRecordSeverity::ERROR);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
+                                         DiagnosticRecordSeverity::ERROR);
 }
 
 TEST_CASE("SUBTRACT on missing orderId does nothing") {
@@ -1424,14 +1425,14 @@ TEST_CASE("MATCH with qty 0/negative qty emit diagnostics; missing orderId ignor
     sim.update(make_event(1, 2, Side::SELL, UpdateType::MATCH, 101, 0, 10, 20, NoAggressorNeededSentinel,
                           UpdateSource::HISTORICAL));
     CHECK(sink.getFills().empty());
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
-                                   DiagnosticRecordSeverity::WARNING);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
+                                         DiagnosticRecordSeverity::WARNING);
 
     sink.reset();
     sim.update(make_event(1, 2, Side::SELL, UpdateType::MATCH, 101, -1, 10, 20, NoAggressorNeededSentinel,
                           UpdateSource::HISTORICAL));
-    assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
-                                   DiagnosticRecordSeverity::ERROR);
+    assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
+                                         DiagnosticRecordSeverity::ERROR);
 
     sink.reset();
     sim.update(make_event(1, 2, Side::SELL, UpdateType::MATCH, 101, 2, 9999, 20, NoAggressorNeededSentinel,
@@ -1495,8 +1496,8 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 100, 1, 1, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1506,8 +1507,8 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                               UpdateSource::STRATEGY));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 99, 1, 2, 11, NoAggressorNeededSentinel,
                               UpdateSource::STRATEGY));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1517,8 +1518,8 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 98, 1, 3, 11, NoAggressorNeededSentinel,
                               UpdateSource::STRATEGY));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1528,8 +1529,8 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                               UpdateSource::STRATEGY));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::ADD, 97, 1, 4, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
 }
 
@@ -1540,8 +1541,8 @@ TEST_CASE("Diagnostics: delete missing order ids") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::DELETE, 100, 0, 10, 11, NoAggressorNeededSentinel,
                               UpdateSource::STRATEGY));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::DELETE_NON_EXISTING_PAPER_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::DELETE_NON_EXISTING_PAPER_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1549,8 +1550,8 @@ TEST_CASE("Diagnostics: delete missing order ids") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::DELETE, 100, 0, 11, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::DELETE_NON_EXISTING_HISTORICAL_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::DELETE_NON_EXISTING_HISTORICAL_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
 }
 
@@ -1566,12 +1567,12 @@ TEST_CASE("Diagnostics: delete side/price mismatch emits both codes") {
     const auto& diags = sink.getDiagnostics();
     REQUIRE(diags.size() == 2);
     const auto& ev = sink.getEvents().back();
-    assert_diag_matches_event(diags[0], ev,
-                              DiagnosticRecordCode::PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
-                              DiagnosticRecordSeverity::WARNING);
-    assert_diag_matches_event(diags[1], ev,
-                              DiagnosticRecordCode::PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
-                              DiagnosticRecordSeverity::WARNING);
+    assert_diagnostic_matches_event(
+        diags[0], ev, DiagnosticRecordCode::PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+        DiagnosticRecordSeverity::WARNING);
+    assert_diagnostic_matches_event(
+        diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+        DiagnosticRecordSeverity::WARNING);
 }
 
 TEST_CASE("Diagnostics: set negative quantity and set missing order") {
@@ -1583,9 +1584,9 @@ TEST_CASE("Diagnostics: set negative quantity and set missing order") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::SET, 100, -5, 1, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink,
-                                       DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(
+            sink, DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO,
+            DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1593,8 +1594,8 @@ TEST_CASE("Diagnostics: set negative quantity and set missing order") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SET, 200, 5, 999, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::SET_NON_EXISTING_ORDER_ID_IS_REJECTED,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::SET_NON_EXISTING_ORDER_ID_IS_REJECTED,
+                                             DiagnosticRecordSeverity::WARNING);
     }
 }
 
@@ -1610,12 +1611,12 @@ TEST_CASE("Diagnostics: set side/price mismatch emits both codes") {
     const auto& diags = sink.getDiagnostics();
     REQUIRE(diags.size() == 2);
     const auto& ev = sink.getEvents().back();
-    assert_diag_matches_event(diags[0], ev,
-                              DiagnosticRecordCode::PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
-                              DiagnosticRecordSeverity::WARNING);
-    assert_diag_matches_event(diags[1], ev,
-                              DiagnosticRecordCode::PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
-                              DiagnosticRecordSeverity::WARNING);
+    assert_diagnostic_matches_event(diags[0], ev,
+                                    DiagnosticRecordCode::PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+                                    DiagnosticRecordSeverity::WARNING);
+    assert_diagnostic_matches_event(
+        diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+        DiagnosticRecordSeverity::WARNING);
 }
 
 TEST_CASE("Diagnostics: subtract reduce warnings") {
@@ -1625,8 +1626,8 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, 0, 1, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1634,8 +1635,8 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, 1, 2, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1648,10 +1649,10 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
         const auto& diags = sink.getDiagnostics();
         REQUIRE(diags.size() == 2);
         const auto& ev = sink.getEvents().back();
-        assert_diag_matches_event(
+        assert_diagnostic_matches_event(
             diags[0], ev, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
-        assert_diag_matches_event(
+        assert_diagnostic_matches_event(
             diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
     }
@@ -1663,7 +1664,7 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::SUBTRACT, 103, 5, 5, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(
+        assert_last_diagnostic_matches_event(
             sink, DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
     }
@@ -1676,8 +1677,8 @@ TEST_CASE("Diagnostics: match reduce warnings") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::MATCH, 110, 0, 10, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1685,8 +1686,8 @@ TEST_CASE("Diagnostics: match reduce warnings") {
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::MATCH, 110, 1, 11, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID,
-                                       DiagnosticRecordSeverity::WARNING);
+        assert_last_diagnostic_matches_event(sink, DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID,
+                                             DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1699,10 +1700,10 @@ TEST_CASE("Diagnostics: match reduce warnings") {
         const auto& diags = sink.getDiagnostics();
         REQUIRE(diags.size() == 2);
         const auto& ev = sink.getEvents().back();
-        assert_diag_matches_event(
+        assert_diagnostic_matches_event(
             diags[0], ev, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
-        assert_diag_matches_event(
+        assert_diagnostic_matches_event(
             diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
     }
@@ -1714,7 +1715,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::MATCH, 113, 5, 14, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(
+        assert_last_diagnostic_matches_event(
             sink, DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID,
             DiagnosticRecordSeverity::WARNING);
     }
@@ -1726,7 +1727,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::MATCH, 114, 1, 15, 11, NoAggressorNeededSentinel,
                               UpdateSource::STRATEGY));
-        assert_last_diag_matches_event(
+        assert_last_diagnostic_matches_event(
             sink, DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE,
             DiagnosticRecordSeverity::ERROR);
     }
@@ -1741,8 +1742,9 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
         sim.bids.erase(100);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::DELETE, 100, 0, 1, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
-                                       DiagnosticRecordSeverity::ERROR);
+        assert_last_diagnostic_matches_event(sink,
+                                             DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                                             DiagnosticRecordSeverity::ERROR);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1752,8 +1754,9 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
         sim.asks.erase(101);
         sim.update(make_event(1, 2, Side::SELL, UpdateType::SET, 101, 3, 2, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
-                                       DiagnosticRecordSeverity::ERROR);
+        assert_last_diagnostic_matches_event(sink,
+                                             DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                                             DiagnosticRecordSeverity::ERROR);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1763,8 +1766,9 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
         sim.bids.erase(102);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 102, 1, 3, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
-                                       DiagnosticRecordSeverity::ERROR);
+        assert_last_diagnostic_matches_event(sink,
+                                             DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                                             DiagnosticRecordSeverity::ERROR);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1774,7 +1778,8 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
         sim.asks.erase(103);
         sim.update(make_event(1, 2, Side::SELL, UpdateType::MATCH, 103, 1, 4, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
-                                       DiagnosticRecordSeverity::ERROR);
+        assert_last_diagnostic_matches_event(sink,
+                                             DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                                             DiagnosticRecordSeverity::ERROR);
     }
 }
