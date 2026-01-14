@@ -26,7 +26,7 @@ jobs:
       - name: Install build deps
         run: |
           brew update
-          brew install cmake ninja llvm pybind11 apache-arrow
+          brew install llvm 
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
 
       - name: C++ format check (clang-format)
