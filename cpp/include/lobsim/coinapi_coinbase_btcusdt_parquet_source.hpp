@@ -12,6 +12,7 @@ namespace lobsim::replay {
 struct CoinapiCoinbaseBTCUSDTParquetSource {
 public:
     explicit CoinapiCoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batchSizeRows = 1 << 15);
+    ~CoinapiCoinbaseBTCUSDTParquetSource();
 
     bool next(CoinapiCoinbaseBTCUSDTRawEvent& out);
 
