@@ -1583,7 +1583,8 @@ TEST_CASE("Diagnostics: set negative quantity and set missing order") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::SET, 100, -5, 1, 11, NoAggressorNeededSentinel,
                               UpdateSource::HISTORICAL));
-        assert_last_diag_matches_event(sink, DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO,
+        assert_last_diag_matches_event(sink,
+                                       DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO,
                                        DiagnosticRecordSeverity::WARNING);
     }
     {
@@ -1647,12 +1648,12 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
         const auto& diags = sink.getDiagnostics();
         REQUIRE(diags.size() == 2);
         const auto& ev = sink.getEvents().back();
-        assert_diag_matches_event(diags[0], ev,
-                                  DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
-                                  DiagnosticRecordSeverity::WARNING);
-        assert_diag_matches_event(diags[1], ev,
-                                  DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
-                                  DiagnosticRecordSeverity::WARNING);
+        assert_diag_matches_event(
+            diags[0], ev, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+            DiagnosticRecordSeverity::WARNING);
+        assert_diag_matches_event(
+            diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+            DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1698,12 +1699,12 @@ TEST_CASE("Diagnostics: match reduce warnings") {
         const auto& diags = sink.getDiagnostics();
         REQUIRE(diags.size() == 2);
         const auto& ev = sink.getEvents().back();
-        assert_diag_matches_event(diags[0], ev,
-                                  DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
-                                  DiagnosticRecordSeverity::WARNING);
-        assert_diag_matches_event(diags[1], ev,
-                                  DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
-                                  DiagnosticRecordSeverity::WARNING);
+        assert_diag_matches_event(
+            diags[0], ev, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+            DiagnosticRecordSeverity::WARNING);
+        assert_diag_matches_event(
+            diags[1], ev, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+            DiagnosticRecordSeverity::WARNING);
     }
     {
         PaperTradingSimulatorCore sim{};
@@ -1725,9 +1726,9 @@ TEST_CASE("Diagnostics: match reduce warnings") {
                               UpdateSource::HISTORICAL));
         sim.update(make_event(3, 4, Side::BUY, UpdateType::MATCH, 114, 1, 15, 11, NoAggressorNeededSentinel,
                               UpdateSource::STRATEGY));
-        assert_last_diag_matches_event(sink,
-                                       DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE,
-                                       DiagnosticRecordSeverity::ERROR);
+        assert_last_diag_matches_event(
+            sink, DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE,
+            DiagnosticRecordSeverity::ERROR);
     }
 }
 
