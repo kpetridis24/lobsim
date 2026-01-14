@@ -1,0 +1,78 @@
+name: E2E (User Simulation)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 06:00 UTC
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: |
+          brew update
+          brew install cmake ninja pybind11 apache-arrow
+
+      - name: Build C++ + Python module
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLOBSIM_BUILD_PYTHON=ON \
+            -DLOBSIM_BUILD_TESTS=OFF
+          cmake --build build
+
+      - name: Install editable Python package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e python
+
+      - name: E2E smoke (engine + events)
+        run: |
+          python - <<'PY'
+          from lobsim.engine import PaperTradingSimulatorCore
+          from lobsim.lob_event import NormalizedLobEvent
+          from lobsim.types import Side, UpdateSource, UpdateType, NoAggressorNeededSentinel
+
+          eng = PaperTradingSimulatorCore()
+          eng.init_from_l3_snapshot(
+              sides=[Side.SELL],
+              prices=[100],
+              quantities=[5],
+              orderIds=[1],
+              traderIds=[11],
+          )
+
+          eng.update(
+              NormalizedLobEvent(
+                  tsExchange=1,
+                  tsReceived=2,
+                  side=Side.BUY,
+                  updateType=UpdateType.ADD,
+                  priceTicks=100,
+                  quantityLots=3,
+                  orderId=2,
+                  traderId=22,
+                  aggressorId=NoAggressorNeededSentinel,
+                  updateSource=UpdateSource.STRATEGY,
+                  symbolId="",
+              )
+          )
+
+          assert eng.depth_at(Side.SELL, 100) == 2
+          assert eng.get_best_price_ticks(Side.SELL) == 100
+          print("E2E OK")
+          PY

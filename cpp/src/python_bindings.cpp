@@ -141,7 +141,8 @@ PYBIND11_MODULE(_core, m) {
                  return NormalizedLobEvent{tsEx,    tsRecv,   side,        ut,  priceTicks,         qtyLots,
                                            orderId, traderId, aggressorId, src, std::move(symbolId)};
              }),
-             py::arg("tsExchange") = 0, py::arg("tsReceived") = 0, py::arg_v("side", Side::BUY, "lobsim.types.Side.BUY"),
+             py::arg("tsExchange") = 0, py::arg("tsReceived") = 0,
+             py::arg_v("side", Side::BUY, "lobsim.types.Side.BUY"),
              py::arg_v("updateType", UpdateType::ADD, "lobsim.types.UpdateType.ADD"), py::arg("priceTicks") = 0,
              py::arg("quantityLots") = 0, py::arg("orderId") = UnknownOrderIdSentinel,
              py::arg("traderId") = UnknownTraderIdSentinel, py::arg("aggressorId") = NoAggressorNeededSentinel,
