@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
-from lobsim.engine import PaperTradingSimulatorCore
+from lobsim.engine import PaperTradingSimulator
 from lobsim.lob_event import NormalizedLobEvent
 from lobsim.replay import ReplayConfig, ReplaySession
 from lobsim.sink import InMemoryLogSink
@@ -127,7 +127,7 @@ class LobsterAdapter:
 
 
 def init_from_orderbook_row(
-    engine: PaperTradingSimulatorCore, row: Sequence[int], levels: int
+    engine: PaperTradingSimulator, row: Sequence[int], levels: int
 ) -> None:
     sides: list[Side] = []
     prices: list[int] = []
@@ -161,7 +161,7 @@ def main() -> int:
 
     levels = 10
 
-    engine = PaperTradingSimulatorCore()
+    engine = PaperTradingSimulator()
     sink = InMemoryLogSink()
     engine.set_log_sink(sink)
 

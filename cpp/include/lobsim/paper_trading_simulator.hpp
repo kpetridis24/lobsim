@@ -19,16 +19,16 @@ public:
     std::size_t paperIndex{0};
 };
 
-class PaperTradingSimulatorCore final : public IMatchingEngine {
+class PaperTradingSimulator final : public IMatchingEngine {
 public:
-    PaperTradingSimulatorCore() : IMatchingEngine() {}
-    PaperTradingSimulatorCore(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                              std::vector<std::int64_t>& quantities, ILogSink* sink = nullptr)
+    PaperTradingSimulator() : IMatchingEngine() {}
+    PaperTradingSimulator(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
+                          std::vector<std::int64_t>& quantities, ILogSink* sink = nullptr)
         : IMatchingEngine() {
         this->sink = sink;
         initFromL2Snapshot(sides, prices, quantities);
     }
-    ~PaperTradingSimulatorCore() = default;
+    ~PaperTradingSimulator() = default;
 
     void update(const NormalizedLobEvent& event) override;
 

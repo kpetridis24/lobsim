@@ -1,4 +1,4 @@
-from ._core import PaperTradingSimulatorCore
+from ._core import PaperTradingSimulator
 
 from typing import Sequence
 
@@ -6,7 +6,7 @@ from .sink import InMemoryLogSink
 from .lob_event import NormalizedLobEvent
 from .types import Side
 
-class PaperTradingSimulatorCore:
+class PaperTradingSimulator:
     def __init__(
         self,
         sides: Sequence[Side] | None = ...,

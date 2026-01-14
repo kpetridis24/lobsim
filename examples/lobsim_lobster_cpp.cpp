@@ -1,6 +1,6 @@
 #include "lobsim/in_memory_sink.hpp"
 #include "lobsim/lob_event.hpp"
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 #include "lobsim/replay_session.hpp"
 
 #include <cmath>
@@ -232,7 +232,7 @@ private:
     std::string symbol;
 };
 
-void initFromOrderbookRow(PaperTradingSimulatorCore& engine, const LobsterOrderbookRow& row, std::size_t levels) {
+void initFromOrderbookRow(PaperTradingSimulator& engine, const LobsterOrderbookRow& row, std::size_t levels) {
     std::vector<Side> sides;
     std::vector<std::int64_t> prices;
     std::vector<std::int64_t> quantities;
@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
 
     constexpr std::size_t levels = 10;
 
-    PaperTradingSimulatorCore engine;
+    PaperTradingSimulator engine;
     InMemoryLogSink sink;
     engine.setLogSink(&sink);
 

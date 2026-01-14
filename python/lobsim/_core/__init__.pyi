@@ -11,7 +11,7 @@ __all__: list[str] = [
     "FillRecord",
     "InMemoryLogSink",
     "NormalizedLobEvent",
-    "PaperTradingSimulatorCore",
+    "PaperTradingSimulator",
     "types",
 ]
 
@@ -102,7 +102,7 @@ class NormalizedLobEvent:
         symbolId: str = "",
     ) -> None: ...
 
-class PaperTradingSimulatorCore:
+class PaperTradingSimulator:
     def __init__(self) -> None: ...
     def depth_at(self, arg0: types.Side, arg1: int) -> int | None: ...
     def init_from_l2_snapshot(
