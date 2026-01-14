@@ -8,13 +8,22 @@
 It consumes an event stream (historical and/or strategy-injected), maintains a **per-order (L3)** book state, and emits facts (fills + diagnostics) via a pluggable sink interface.
 The core is written in **C++20** for performance, with **Python bindings** for research workflows.
 
-## What you get
-- **L3 engine**: applies `ADD`, `DELETE`, `SUBTRACT`, `MATCH`, `SET` via `NormalizedLobEvent`.
-- **Paper execution**: strategy events (`UpdateSource::STRATEGY`) can cross and/or rest and generate fills.
-- **Structured output**: maker/taker fills (`FillRecord`) + event application stream (`EventApplyRecord`) + diagnostics (`DiagnosticRecord`).
-- **Book observation APIs**: best price, depth-at-price, L2 top-N ladders.
-- **Replay utilities**: `ReplaySession` to step events and enforce monotonic time assumptions.
-- **Parity tooling**: script to compare Python vs C++ fill streams on the same sample data.
+## Why use it
+- **Research faster**: replay event-by-event, inspect the book, inject your own strategy orders, and analyze fills in one loop.
+- **Model-in-the-loop**: compute signals or run ML inference on live book views during replay (without breaking event ordering).
+- **Stay reproducible**: deterministic engine + structured outputs make results debuggable and comparable across runs.
+- **Works in Python and C++**: run research in notebooks and deploy the same mechanics in native code.
+- **Measure execution**: fills include maker/taker metadata and timestamps, so you can evaluate queueing and fill quality.
+- **Lightning fast**: the core is C++20; Python bindings keep research workflows responsive even on large event streams.
+- **Built-in observability**: structured fills, event-application records, and diagnostics make it easy to debug, audit, and understand your event stream.
+- **Roadmap**: multi-book replay + monitoring primitives for cross-venue analysis (e.g., arbitrage/hedging research) is a planned extension.
+
+## Core concepts
+- **`PaperTradingSimulator`**: the main engine. Call `update(NormalizedLobEvent)` and query the book (`getBestPriceTicks`, `depthAt`, `l2TopN`).
+- **`NormalizedLobEvent`**: the canonical event schema (`ADD`, `DELETE`, `SUBTRACT`, `MATCH`, `SET`) plus metadata (`UpdateSource::{HISTORICAL,STRATEGY}`).
+- **`ReplaySession`**: helper to step events and optionally enforce monotonic `tsReceived` during replay.
+- **`ILogSink` / `InMemoryLogSink`**: structured observability for research and debugging.
+- **`FillRecord` / `EventApplyRecord` / `DiagnosticRecord`**: the emitted facts: fills, applied events, and warnings/errors with event context.
 
 ## Installation / prerequisites (developer build)
 This repo is built with CMake and ships Python bindings via `pybind11`.
@@ -64,8 +73,8 @@ Runs both implementations and diffs the full fill stream (all fields).
 
 ## Benchmarks
 Two benchmark entry points are provided:
-- `examples/lobsim_bench_cpp.cpp` (C++)
-- `examples/lobsim_bench_py.py` (Python)
+- `benchmark/lobsim_bench_cpp.cpp` (C++)
+- `benchmark/lobsim_bench_py.py` (Python)
 
 Run both:
 ```bash
@@ -75,15 +84,6 @@ Run both:
 Notes:
 - Python defaults to **no sink attached** (so it doesn’t store millions of fills in RAM). Use `--with-sink` only for small runs.
 - C++ uses a lightweight counting sink by default (counts fills/events/diagnostics without storing them).
-
-## Data notes (LOBSTER)
-LOBSTER provides:
-- a **message** file (event tape) and
-- an **orderbook** file (L2 snapshots after each message row),
-aligned row-by-row.
-
-Important limitation: you cannot always reconstruct a perfect full L3 order list from an arbitrary window, because the book at the start of the window may contain orders created before the window.
-In those cases, you may see a small drift vs the provided L2 snapshots when the message file references order IDs that were never submitted within the window.
 
 ## Repository layout
 - `cpp/include/lobsim/` — C++ public headers
