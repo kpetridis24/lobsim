@@ -15,9 +15,14 @@ void InMemoryLogSink::onEventApply(const EventApplyRecord& r) {
     updateStrategyOrder(r);
 }
 
+void InMemoryLogSink::onDiagnostic(const DiagnosticRecord& r) {
+    diagnostics.push_back(r);
+}
+
 void InMemoryLogSink::reset() {
     fills.clear();
     events.clear();
+    diagnostics.clear();
     paperLedger.clear();
     rejectedStrategyEvents.clear();
 }
@@ -40,6 +45,10 @@ const std::vector<FillRecord>& InMemoryLogSink::getFills() const {
 
 const std::vector<EventApplyRecord>& InMemoryLogSink::getEvents() const {
     return events;
+}
+
+const std::vector<DiagnosticRecord>& InMemoryLogSink::getDiagnostics() const {
+    return diagnostics;
 }
 
 const std::unordered_map<std::int64_t, PaperOrderLedgerEntry>& InMemoryLogSink::getPaperLedger() const {
@@ -89,7 +98,6 @@ void InMemoryLogSink::applyStrategyFill(std::int64_t orderId, UpdateSource sourc
             state.remainingQty == 0 ? PaperOrderLedgerStatus::FILLED : PaperOrderLedgerStatus::PARTIALLY_FILLED;
         state.lastUpdateSeq = r.seq;
     }
-
 }
 
 void InMemoryLogSink::updateStrategyOrder(const EventApplyRecord& r) {

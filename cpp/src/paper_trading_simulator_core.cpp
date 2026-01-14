@@ -8,13 +8,15 @@
 
 /**
  * TODO:
- * 1. Design and implement logging/emitting of events.
- * 2. For now, if a strategy wants to execute a market order, it should do it with an ADD call at
+ * - For now, if a strategy wants to execute a market order, it should do it with an ADD call at
  *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
  *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
- * 3. Add checks for out-of-limits values -> reject event completely.
- * 4. Store ledger/sink for paper orders too.
- * 5. L2 init cannot support exact paper order trading because we reject MODIFYs with orderIds not present
+ * - Add checks for out-of-limits values -> reject event completely.
+ * - L2 init cannot support exact paper order trading because we reject MODIFYs with orderIds not present.
+ * - If a SET with non-existing order ID arrives, it is rejected now. Future work: track invalid events,
+ *    and try to reconcile them later. For example if an ADD arrives later with a TS earlier than the SET
+ *    that was rejected, it means that the ADD should have happend first (feed delays), so we must reconcile
+ *    and maybe adjust the order book
  */
 
 void PaperTradingSimulatorCore::update(const NormalizedLobEvent& event) {
@@ -61,7 +63,7 @@ void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
 
     if (orderInfo.contains(event.orderId) || paperOrders.contains(event.orderId) ||
         paperOrderInfo.contains(event.orderId)) {
-        // TODO: log duplicate orderId. Shouldn't happen on ADD
+        emitDiagnostic(event, DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID, DiagnosticRecordSeverity::WARNING);
         return;
     }
 
@@ -527,7 +529,8 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
     if (event.updateSource == UpdateSource::STRATEGY) {
         auto it = paperOrderInfo.find(event.orderId);
         if (it == paperOrderInfo.end()) {
-            // TODO: log DELETE on non-existing paper orderId.
+            emitDiagnostic(event, DiagnosticRecordCode::DELETE_NON_EXISTING_PAPER_ORDER_ID,
+                           DiagnosticRecordSeverity::WARNING);
             return;
         }
         auto storedSide = std::get<0>(it->second);
@@ -557,7 +560,8 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
-        // TODO: log DELETE on non-existing orderId.
+        emitDiagnostic(event, DiagnosticRecordCode::DELETE_NON_EXISTING_HISTORICAL_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
         return;
     }
 
@@ -565,12 +569,14 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 
     auto storedSide = std::get<0>(info);
     if (storedSide != event.side) {
-        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto storedPriceTicks = std::get<1>(info);
     if (storedPriceTicks != event.priceTicks) {
-        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto queueLocationIt = std::get<2>(info);
@@ -623,11 +629,13 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
         return;
     }
     if (event.quantityLots < 0) {
-        // TODO: log that set with negative liquidity was requested. Set to 0 for non-blocking behaviour.
+        emitDiagnostic(event, DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO,
+                       DiagnosticRecordSeverity::WARNING);
     }
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
-        // TODO: log SET on non-existing orderId.
+        emitDiagnostic(event, DiagnosticRecordCode::SET_NON_EXISTING_ORDER_ID_IS_REJECTED,
+                       DiagnosticRecordSeverity::WARNING);
         return;
     }
 
@@ -635,12 +643,14 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
 
     auto storedSide = std::get<0>(info);
     if (storedSide != event.side) {
-        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto storedPriceTicks = std::get<1>(info);
     if (storedPriceTicks != event.priceTicks) {
-        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto queueLocationIt = std::get<2>(info);
@@ -682,13 +692,15 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
         throw std::runtime_error("Negative quantityLots found.");
     }
     if (event.quantityLots == 0) {
-        // TODO: log that a order cancel with 0 quantity was requested.
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
+                       DiagnosticRecordSeverity::WARNING);
         return;
     }
 
     auto it = orderInfo.find(event.orderId);
     if (it == orderInfo.end()) {
-        // TODO: log SUBTRACT on non-existing orderId.
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
         return;
     }
 
@@ -696,12 +708,14 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
 
     auto storedSide = std::get<0>(info);
     if (storedSide != event.side) {
-        // TODO: log that given side doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto storedPriceTicks = std::get<1>(info);
     if (storedPriceTicks != event.priceTicks) {
-        // TODO: log that given price doesn't match with what is stored for this orderId. Warn for corrupted data.
+        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     auto queueLocationIt = std::get<2>(info);
@@ -723,7 +737,8 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
     auto take = std::min<std::int64_t>(liquidity, event.quantityLots);
 
     if (event.quantityLots > liquidity) {
-        // TODO: log that requested SUBTRACT with Q > existing, warning for corrupt data.
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID,
+                       DiagnosticRecordSeverity::WARNING);
     }
 
     liquidity -= take;
@@ -761,8 +776,8 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
     }
 
     if (isTradeOnPassiveOrder && (event.updateSource == UpdateSource::STRATEGY)) {
-        // TODO: Log warning. If someone wants to do a Market Order via their strategy, they must use an ADD that
-        // crosses. In future we'll implement an aggressor API. MATCH is for the passive order ONLY.
+        emitDiagnostic(event, DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE,
+                       DiagnosticRecordSeverity::ERROR);
     }
 }
 
@@ -941,4 +956,12 @@ std::optional<std::int64_t> PaperTradingSimulatorCore::getBestPriceTicks(Side si
 
 void PaperTradingSimulatorCore::setLogSink(ILogSink* sink) {
     this->sink = sink;
+}
+
+void PaperTradingSimulatorCore::emitDiagnostic(const NormalizedLobEvent& event, DiagnosticRecordCode code,
+                                               DiagnosticRecordSeverity severity) {
+    if (sink == nullptr) {
+        return;
+    }
+    sink->onDiagnostic(DiagnosticRecord{seq, event.tsExchange, event.tsReceived, code, severity});
 }

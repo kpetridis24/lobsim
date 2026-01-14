@@ -40,10 +40,39 @@ struct EventApplyRecord {
     std::int64_t aggressorId;
 };
 
+enum class DiagnosticRecordCode : std::uint8_t {
+    ADD_DUPLICATE_ORDER_ID = 0,
+    DELETE_NON_EXISTING_PAPER_ORDER_ID = 1,
+    DELETE_NON_EXISTING_HISTORICAL_ORDER_ID = 2,
+    PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID = 3,
+    PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID = 4,
+    SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO = 5,
+    SET_NON_EXISTING_ORDER_ID_IS_REJECTED = 6,
+    PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID = 7,
+    PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID = 8,
+    REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY = 9,
+    REQUESTED_REDUCE_NON_EXISTING_ORDER_ID = 10,
+    PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID = 11,
+    PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID = 12,
+    REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID = 13,
+    PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE = 14,
+};
+
+enum class DiagnosticRecordSeverity : std::uint8_t { INFO = 0, WARNING = 1, ERROR = 2 };
+
+struct DiagnosticRecord {
+    std::uint64_t seq;
+    std::int64_t tsExchange;
+    std::int64_t tsReceived;
+    DiagnosticRecordCode code;
+    DiagnosticRecordSeverity severity;
+};
+
 class ILogSink {
 public:
     virtual ~ILogSink() = default;
     virtual void onFill(const FillRecord& r) = 0;
     virtual void onEventApply(const EventApplyRecord& r) = 0;
+    virtual void onDiagnostic(const DiagnosticRecord& r) = 0;
     virtual void reset() {}
 };

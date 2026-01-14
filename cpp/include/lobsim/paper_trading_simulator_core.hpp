@@ -103,6 +103,7 @@ private:
     void onSet(const NormalizedLobEvent& event);
 
     void onPartialOrderCancel(const NormalizedLobEvent& event, bool isTradeOnPassiveOrder);
+    void emitDiagnostic(const NormalizedLobEvent& event, DiagnosticRecordCode code, DiagnosticRecordSeverity severity);
 
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);
