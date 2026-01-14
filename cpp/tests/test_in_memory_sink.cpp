@@ -1,5 +1,5 @@
 #include "lobsim/in_memory_sink.hpp"
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>

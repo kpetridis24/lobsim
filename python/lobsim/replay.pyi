@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable, Protocol, Sequence, TypeVar
 
-from .engine import PaperTradingSimulatorCore
+from .engine import PaperTradingSimulator
 from .lob_event import NormalizedLobEvent
 
 class ReplayConfig:
@@ -32,7 +32,7 @@ class AdapterLike(Protocol[_RawT]):
 
 class ReplaySession:
     def __init__(
-        self, engine: PaperTradingSimulatorCore, config: ReplayConfig = ...
+        self, engine: PaperTradingSimulator, config: ReplayConfig = ...
     ) -> None: ...
     def step(self, event: NormalizedLobEvent) -> None: ...
     def run(

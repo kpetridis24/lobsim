@@ -1,6 +1,6 @@
 #include "lobsim/in_memory_sink.hpp"
 #define private public
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 #undef private
 
 #include <catch2/catch_test_macros.hpp>
@@ -61,7 +61,7 @@ static void assert_last_diagnostic_matches_event(const InMemoryLogSink& sink, Di
     assert_diagnostic_matches_event(*diag, ev, code, severity);
 }
 
-void seed_l3(PaperTradingSimulatorCore& sim, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+void seed_l3(PaperTradingSimulator& sim, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
              const std::vector<std::int64_t>& qtys, const std::vector<std::int64_t>& orderIds,
              const std::vector<std::int64_t>& traderIds) {
     sim.initFromL3Snapshot(sides, prices, qtys, orderIds, traderIds);
@@ -72,7 +72,7 @@ TEST_CASE("Valid initialization from L2 snapshot + depth at levels") {
     std::vector<std::int64_t> prices{120, 129, 123, 131};
     std::vector<std::int64_t> quantities{79, 53, 88, 64};
 
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     sim.initFromL2Snapshot(sides, prices, quantities);
 
     for (int i = 0; i < static_cast<int>(sides.size()); ++i) {
@@ -88,7 +88,7 @@ TEST_CASE("Duplicate price levels on L2 initialization") {
     std::vector<Side> sides{Side::BUY, Side::SELL, Side::BUY, Side::SELL};
     std::vector<std::int64_t> prices{120, 129, 120, 131};
     std::vector<std::int64_t> quantities{79, 53, 88, 64};
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     REQUIRE_THROWS_AS(sim.initFromL2Snapshot(sides, prices, quantities), std::runtime_error);
 }
 
@@ -96,7 +96,7 @@ TEST_CASE("Different array sizes on L2 initialization") {
     std::vector<Side> sides{Side::BUY, Side::SELL, Side::BUY, Side::SELL};
     std::vector<std::int64_t> prices{120, 129, 121, 131, 140};
     std::vector<std::int64_t> quantities{79, 53, 88, 64};
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     REQUIRE_THROWS_AS(sim.initFromL2Snapshot(sides, prices, quantities), std::runtime_error);
 }
 
@@ -107,7 +107,7 @@ TEST_CASE("Valid initialization from L3 snapshot + depth at levels") {
     std::vector<std::int64_t> orderIds{1, 2, 3, 4};
     std::vector<std::int64_t> traderIds{1, 2, 1, 3};
 
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     sim.initFromL3Snapshot(sides, prices, quantities, orderIds, traderIds);
 
     for (int i = 0; i < static_cast<int>(sides.size()); ++i) {
@@ -125,7 +125,7 @@ TEST_CASE("Different array sizes on L3 initialization") {
     std::vector<std::int64_t> quantities{79, 53, 88, 64};
     std::vector<std::int64_t> orderIds{1, 2, 3, 4};
     std::vector<std::int64_t> traderIds{1, 2, 3, 4};
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     REQUIRE_THROWS_AS(sim.initFromL3Snapshot(sides, prices, quantities, orderIds, traderIds), std::runtime_error);
 }
 
@@ -133,7 +133,7 @@ TEST_CASE("TopN L2 view") {
     std::vector<Side> sides{Side::BUY, Side::SELL, Side::BUY, Side::SELL};
     std::vector<std::int64_t> prices{120, 129, 123, 131};
     std::vector<std::int64_t> quantities{79, 53, 88, 64};
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
 
     REQUIRE(sim.l2TopN(Side::BUY, 1).empty());
     REQUIRE(sim.l2TopN(Side::SELL, 1).empty());
@@ -158,7 +158,7 @@ TEST_CASE("TopN L2 view") {
 }
 
 TEST_CASE("Paper strategy ADD crossing emmits fills but does not mutate book") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -199,7 +199,7 @@ TEST_CASE("Paper strategy ADD crossing emmits fills but does not mutate book") {
 }
 
 TEST_CASE("Historical crossing ADD consumes book and emits fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -229,7 +229,7 @@ TEST_CASE("Historical crossing ADD consumes book and emits fills") {
 }
 
 TEST_CASE("HISTORICAL ADD non-crossing to empty book rests order, no fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -246,7 +246,7 @@ TEST_CASE("HISTORICAL ADD non-crossing to empty book rests order, no fills") {
 }
 
 TEST_CASE("STRATEGY ADD non-crossing does nothing (no fills, no resting, no mutation)") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -266,7 +266,7 @@ TEST_CASE("STRATEGY ADD non-crossing does nothing (no fills, no resting, no muta
 }
 
 TEST_CASE("STRATEGY ADD crossing emits FIFO fills and does not mutate book") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -298,7 +298,7 @@ TEST_CASE("STRATEGY ADD crossing emits FIFO fills and does not mutate book") {
 }
 
 TEST_CASE("HISTORICAL ADD crossing partially fills and rests remainder on own side") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -324,7 +324,7 @@ TEST_CASE("HISTORICAL ADD crossing partially fills and rests remainder on own si
 }
 
 TEST_CASE("HISTORICAL ADD crossing fully fills and does not rest") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -342,7 +342,7 @@ TEST_CASE("HISTORICAL ADD crossing fully fills and does not rest") {
 }
 
 TEST_CASE("HISTORICAL ADD crossing consumes multiple levels in price priority") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -371,7 +371,7 @@ TEST_CASE("HISTORICAL ADD crossing consumes multiple levels in price priority") 
 }
 
 TEST_CASE("FIFO within a level: older resting order is consumed first") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -392,7 +392,7 @@ TEST_CASE("FIFO within a level: older resting order is consumed first") {
 }
 
 TEST_CASE("ADD with duplicate orderId is ignored (no fills, no state change)") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::SELL}, {105}, {10}, {1001}, {501});
@@ -408,7 +408,7 @@ TEST_CASE("ADD with duplicate orderId is ignored (no fills, no state change)") {
 }
 
 TEST_CASE("ADD with qty=0 does nothing (no fills, no state change)") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {}, {}, {}, {}, {});
@@ -420,7 +420,7 @@ TEST_CASE("ADD with qty=0 does nothing (no fills, no state change)") {
 }
 
 TEST_CASE("ADD with negative quantity emits diagnostic") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {}, {}, {}, {}, {});
@@ -432,7 +432,7 @@ TEST_CASE("ADD with negative quantity emits diagnostic") {
 }
 
 TEST_CASE("Stale heap entry is popped and does not prevent matching next level") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -462,7 +462,7 @@ TEST_CASE("Stale heap entry is popped and does not prevent matching next level")
 }
 
 TEST_CASE("Paper sweep does not double-count liquidity when heap has duplicate price entries") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -493,7 +493,7 @@ TEST_CASE("Paper sweep does not double-count liquidity when heap has duplicate p
 }
 
 TEST_CASE("Paper order fills after trades exceed market ahead") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -515,7 +515,7 @@ TEST_CASE("Paper order fills after trades exceed market ahead") {
 }
 
 TEST_CASE("Multiple paper orders fill FIFO when trade volume is sufficient") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -541,7 +541,7 @@ TEST_CASE("Multiple paper orders fill FIFO when trade volume is sufficient") {
 }
 
 TEST_CASE("Canceling a market order behind paper does not advance paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -563,7 +563,7 @@ TEST_CASE("Canceling a market order behind paper does not advance paper") {
 }
 
 TEST_CASE("Canceling a market order ahead advances paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -587,7 +587,7 @@ TEST_CASE("Canceling a market order ahead advances paper") {
 }
 
 TEST_CASE("Paper partial fill persists and completes on later trades") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -617,7 +617,7 @@ TEST_CASE("Paper partial fill persists and completes on later trades") {
 }
 
 TEST_CASE("Paper SUBTRACT reduces size used for future fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -641,7 +641,7 @@ TEST_CASE("Paper SUBTRACT reduces size used for future fills") {
 }
 
 TEST_CASE("Paper DELETE removes order and prevents future fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -663,7 +663,7 @@ TEST_CASE("Paper DELETE removes order and prevents future fills") {
 }
 
 TEST_CASE("Paper fills work on the ask side too") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -684,7 +684,7 @@ TEST_CASE("Paper fills work on the ask side too") {
 }
 
 TEST_CASE("Paper order ahead of later market orders fills at an initially empty level") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -706,7 +706,7 @@ TEST_CASE("Paper order ahead of later market orders fills at an initially empty 
 }
 
 TEST_CASE("Paper orders respect interleaved market orders in queue priority") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -732,7 +732,7 @@ TEST_CASE("Paper orders respect interleaved market orders in queue priority") {
 }
 
 TEST_CASE("Market SUBTRACT ahead advances paper while preserving priority") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -756,7 +756,7 @@ TEST_CASE("Market SUBTRACT ahead advances paper while preserving priority") {
 }
 
 TEST_CASE("Market SET behind does not advance paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -778,7 +778,7 @@ TEST_CASE("Market SET behind does not advance paper") {
 }
 
 TEST_CASE("Paper SET increases size used for later fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -802,7 +802,7 @@ TEST_CASE("Paper SET increases size used for later fills") {
 }
 
 TEST_CASE("Paper SUBTRACT beyond remaining cancels and prevents fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -824,7 +824,7 @@ TEST_CASE("Paper SUBTRACT beyond remaining cancels and prevents fills") {
 }
 
 TEST_CASE("Paper SET to zero cancels and prevents fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -846,7 +846,7 @@ TEST_CASE("Paper SET to zero cancels and prevents fills") {
 }
 
 TEST_CASE("MATCH ahead advances paper for later trades") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -870,7 +870,7 @@ TEST_CASE("MATCH ahead advances paper for later trades") {
 }
 
 TEST_CASE("MATCH behind does not advance paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -892,7 +892,7 @@ TEST_CASE("MATCH behind does not advance paper") {
 }
 
 TEST_CASE("SET ahead increase pushes paper back") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -914,7 +914,7 @@ TEST_CASE("SET ahead increase pushes paper back") {
 }
 
 TEST_CASE("SET ahead decrease advances paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -938,7 +938,7 @@ TEST_CASE("SET ahead decrease advances paper") {
 }
 
 TEST_CASE("SUBTRACT behind does not advance paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -960,7 +960,7 @@ TEST_CASE("SUBTRACT behind does not advance paper") {
 }
 
 TEST_CASE("Paper partial fill blocks later paper when volume is insufficient") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -983,7 +983,7 @@ TEST_CASE("Paper partial fill blocks later paper when volume is insufficient") {
 }
 
 TEST_CASE("Canceling first paper advances second paper") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1009,7 +1009,7 @@ TEST_CASE("Canceling first paper advances second paper") {
 }
 
 TEST_CASE("Increasing first paper delays second paper fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1035,7 +1035,7 @@ TEST_CASE("Increasing first paper delays second paper fills") {
 }
 
 TEST_CASE("Decreasing first paper advances second paper fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1063,7 +1063,7 @@ TEST_CASE("Decreasing first paper advances second paper fills") {
 }
 
 TEST_CASE("Paper ADD with qty 0 is ignored") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1082,7 +1082,7 @@ TEST_CASE("Paper ADD with qty 0 is ignored") {
 }
 
 TEST_CASE("Paper SUBTRACT with negative qty emits diagnostic") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1093,7 +1093,7 @@ TEST_CASE("Paper SUBTRACT with negative qty emits diagnostic") {
 }
 
 TEST_CASE("Paper SET with negative qty cancels order") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1115,7 +1115,7 @@ TEST_CASE("Paper SET with negative qty cancels order") {
 }
 
 TEST_CASE("Duplicate paper ADD is ignored") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1136,7 +1136,7 @@ TEST_CASE("Duplicate paper ADD is ignored") {
 }
 
 TEST_CASE("ensurePaperLevel builds from existing market book") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1153,7 +1153,7 @@ TEST_CASE("ensurePaperLevel builds from existing market book") {
 }
 
 TEST_CASE("Paper orders only fill at their own price level") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1179,7 +1179,7 @@ TEST_CASE("Paper orders only fill at their own price level") {
 }
 
 TEST_CASE("L2-seeded liquidity (orderId sentinel) can be consumed and emits fills with sentinel maker") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1203,7 +1203,7 @@ TEST_CASE("L2-seeded liquidity (orderId sentinel) can be consumed and emits fill
 }
 
 TEST_CASE("SUBTRACT/DELETE/MATCH targeting L2-seeded sentinel orderId are treated as missing") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1233,7 +1233,7 @@ TEST_CASE("SUBTRACT/DELETE/MATCH targeting L2-seeded sentinel orderId are treate
 }
 
 TEST_CASE("initFromL3Snapshot throws on duplicate orderId") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
 
     const std::vector<Side> sides{Side::SELL, Side::SELL};
     const std::vector<std::int64_t> prices{100, 101};
@@ -1245,7 +1245,7 @@ TEST_CASE("initFromL3Snapshot throws on duplicate orderId") {
 }
 
 TEST_CASE("update with unknown UpdateType emits diagnostic") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1256,7 +1256,7 @@ TEST_CASE("update with unknown UpdateType emits diagnostic") {
 }
 
 TEST_CASE("SUBTRACT reduces quantity without emitting fills") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1272,7 +1272,7 @@ TEST_CASE("SUBTRACT reduces quantity without emitting fills") {
 }
 
 TEST_CASE("SUBTRACT removing the top level updates best price despite stale heap") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1288,7 +1288,7 @@ TEST_CASE("SUBTRACT removing the top level updates best price despite stale heap
 }
 
 TEST_CASE("SUBTRACT with quantity exceeding liquidity clamps to zero and removes order") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
 
@@ -1302,7 +1302,7 @@ TEST_CASE("SUBTRACT with quantity exceeding liquidity clamps to zero and removes
 }
 
 TEST_CASE("SUBTRACT with qty 0 and negative qty emit diagnostics") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::BUY}, {100}, {4}, {1}, {1});
@@ -1323,7 +1323,7 @@ TEST_CASE("SUBTRACT with qty 0 and negative qty emit diagnostics") {
 }
 
 TEST_CASE("SUBTRACT on missing orderId does nothing") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::SELL}, {105}, {5}, {10}, {20});
@@ -1337,7 +1337,7 @@ TEST_CASE("SUBTRACT on missing orderId does nothing") {
 }
 
 TEST_CASE("DELETE removes order regardless of provided side/price") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::SELL, Side::SELL}, {101, 103}, {2, 4}, {1, 2}, {11, 12});
 
     // Mismatch side/price but correct orderId
@@ -1351,7 +1351,7 @@ TEST_CASE("DELETE removes order regardless of provided side/price") {
 }
 
 TEST_CASE("DELETE on missing orderId is a no-op") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::SELL}, {101}, {2}, {1}, {11});
 
     sim.update(make_event(1, 2, Side::SELL, UpdateType::DELETE, 101, 0, 999, 11, NoAggressorNeededSentinel,
@@ -1363,7 +1363,7 @@ TEST_CASE("DELETE on missing orderId is a no-op") {
 }
 
 TEST_CASE("DELETE of best level leaves heap stale but best price still resolves") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::SELL, Side::SELL}, {100, 101}, {5, 6}, {10, 11}, {20, 21});
 
     sim.update(make_event(1, 2, Side::SELL, UpdateType::DELETE, 100, 0, 10, 20, NoAggressorNeededSentinel,
@@ -1375,7 +1375,7 @@ TEST_CASE("DELETE of best level leaves heap stale but best price still resolves"
 }
 
 TEST_CASE("MATCH partially fills passive order and emits fill with maker metadata") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::SELL}, {101}, {5}, {5001}, {9001});
@@ -1397,7 +1397,7 @@ TEST_CASE("MATCH partially fills passive order and emits fill with maker metadat
 }
 
 TEST_CASE("MATCH over-aggressive qty fills remaining, removes order, and best price moves on") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::BUY, Side::BUY}, {100, 99}, {2, 4}, {1, 2}, {11, 22});
@@ -1416,7 +1416,7 @@ TEST_CASE("MATCH over-aggressive qty fills remaining, removes order, and best pr
 }
 
 TEST_CASE("MATCH with qty 0/negative qty emit diagnostics; missing orderId ignored") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink;
     sim.setLogSink(&sink);
     seed_l3(sim, {Side::SELL}, {101}, {5}, {10}, {20});
@@ -1444,7 +1444,7 @@ TEST_CASE("MATCH with qty 0/negative qty emit diagnostics; missing orderId ignor
 }
 
 TEST_CASE("SET reduces quantity to exact value and can increase it") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::SELL}, {105}, {10}, {1}, {11});
 
     sim.update(make_event(1, 2, Side::SELL, UpdateType::SET, 105, 4, 1, 11, NoAggressorNeededSentinel,
@@ -1461,7 +1461,7 @@ TEST_CASE("SET reduces quantity to exact value and can increase it") {
 }
 
 TEST_CASE("SET to zero or negative removes order and advances best price") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::SELL, Side::SELL}, {100, 105}, {5, 6}, {1, 2}, {11, 22});
 
     sim.update(make_event(1, 2, Side::SELL, UpdateType::SET, 100, 0, 1, 11, NoAggressorNeededSentinel,
@@ -1476,7 +1476,7 @@ TEST_CASE("SET to zero or negative removes order and advances best price") {
 }
 
 TEST_CASE("SET on missing orderId is ignored") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     seed_l3(sim, {Side::BUY}, {100}, {5}, {1}, {11});
 
     sim.update(make_event(1, 2, Side::BUY, UpdateType::SET, 100, 2, 9999, 11, NoAggressorNeededSentinel,
@@ -1489,7 +1489,7 @@ TEST_CASE("SET on missing orderId is ignored") {
 
 TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 1, 1, 11, NoAggressorNeededSentinel,
@@ -1500,7 +1500,7 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 99, 1, 2, 11, NoAggressorNeededSentinel,
@@ -1511,7 +1511,7 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 98, 1, 3, 11, NoAggressorNeededSentinel,
@@ -1522,7 +1522,7 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 97, 1, 4, 11, NoAggressorNeededSentinel,
@@ -1536,7 +1536,7 @@ TEST_CASE("Diagnostics: duplicate add orderId scenarios") {
 
 TEST_CASE("Diagnostics: delete missing order ids") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::DELETE, 100, 0, 10, 11, NoAggressorNeededSentinel,
@@ -1545,7 +1545,7 @@ TEST_CASE("Diagnostics: delete missing order ids") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::DELETE, 100, 0, 11, 11, NoAggressorNeededSentinel,
@@ -1556,7 +1556,7 @@ TEST_CASE("Diagnostics: delete missing order ids") {
 }
 
 TEST_CASE("Diagnostics: delete side/price mismatch emits both codes") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink{};
     sim.setLogSink(&sink);
     sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 1, 11, NoAggressorNeededSentinel,
@@ -1577,7 +1577,7 @@ TEST_CASE("Diagnostics: delete side/price mismatch emits both codes") {
 
 TEST_CASE("Diagnostics: set negative quantity and set missing order") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 1, 11, NoAggressorNeededSentinel,
@@ -1589,7 +1589,7 @@ TEST_CASE("Diagnostics: set negative quantity and set missing order") {
             DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SET, 200, 5, 999, 11, NoAggressorNeededSentinel,
@@ -1600,7 +1600,7 @@ TEST_CASE("Diagnostics: set negative quantity and set missing order") {
 }
 
 TEST_CASE("Diagnostics: set side/price mismatch emits both codes") {
-    PaperTradingSimulatorCore sim{};
+    PaperTradingSimulator sim{};
     InMemoryLogSink sink{};
     sim.setLogSink(&sink);
     sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 5, 1, 11, NoAggressorNeededSentinel,
@@ -1621,7 +1621,7 @@ TEST_CASE("Diagnostics: set side/price mismatch emits both codes") {
 
 TEST_CASE("Diagnostics: subtract reduce warnings") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, 0, 1, 11, NoAggressorNeededSentinel,
@@ -1630,7 +1630,7 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::SUBTRACT, 100, 1, 2, 11, NoAggressorNeededSentinel,
@@ -1639,7 +1639,7 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 101, 5, 3, 11, NoAggressorNeededSentinel,
@@ -1657,7 +1657,7 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
             DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 103, 3, 5, 11, NoAggressorNeededSentinel,
@@ -1672,7 +1672,7 @@ TEST_CASE("Diagnostics: subtract reduce warnings") {
 
 TEST_CASE("Diagnostics: match reduce warnings") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::MATCH, 110, 0, 10, 11, NoAggressorNeededSentinel,
@@ -1681,7 +1681,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::MATCH, 110, 1, 11, 11, NoAggressorNeededSentinel,
@@ -1690,7 +1690,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
                                              DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 110, 5, 12, 11, NoAggressorNeededSentinel,
@@ -1708,7 +1708,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
             DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 113, 3, 14, 11, NoAggressorNeededSentinel,
@@ -1720,7 +1720,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
             DiagnosticRecordSeverity::WARNING);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 114, 3, 15, 11, NoAggressorNeededSentinel,
@@ -1735,7 +1735,7 @@ TEST_CASE("Diagnostics: match reduce warnings") {
 
 TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match") {
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         seed_l3(sim, {Side::BUY}, {100}, {5}, {1}, {11});
@@ -1747,7 +1747,7 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
                                              DiagnosticRecordSeverity::ERROR);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         seed_l3(sim, {Side::SELL}, {101}, {5}, {2}, {11});
@@ -1759,7 +1759,7 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
                                              DiagnosticRecordSeverity::ERROR);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         seed_l3(sim, {Side::BUY}, {102}, {5}, {3}, {11});
@@ -1771,7 +1771,7 @@ TEST_CASE("Diagnostics: corrupt book price triggers on delete/set/subtract/match
                                              DiagnosticRecordSeverity::ERROR);
     }
     {
-        PaperTradingSimulatorCore sim{};
+        PaperTradingSimulator sim{};
         InMemoryLogSink sink{};
         sim.setLogSink(&sink);
         seed_l3(sim, {Side::SELL}, {103}, {5}, {4}, {11});

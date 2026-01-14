@@ -3,7 +3,7 @@
 #include "lobsim/in_memory_sink.hpp"
 #include "lobsim/instrument.hpp"
 #include "lobsim/lob_event.hpp"
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 #include "lobsim/replay_session.hpp"
 
 #include <cstdint>
@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
     }
 
     if (!dump_fills_path.empty()) {
-        PaperTradingSimulatorCore engine;
+        PaperTradingSimulator engine;
         InMemoryLogSink sink;
         engine.setLogSink(&sink);
 
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
 
     {
         // Replay all events using the ReplaySession API
-        PaperTradingSimulatorCore engine;
+        PaperTradingSimulator engine;
         InMemoryLogSink sink;
         engine.setLogSink(&sink);
 
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     }
 
     {
-        PaperTradingSimulatorCore engine;
+        PaperTradingSimulator engine;
         InMemoryLogSink sink;
         engine.setLogSink(&sink);
 

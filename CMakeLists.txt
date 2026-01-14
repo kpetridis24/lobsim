@@ -25,7 +25,7 @@ find_package(Parquet CONFIG REQUIRED)
 # ---- Core library: lobsim_core ----
 # List sources explicitly (recommended). Add more files as you implement.
 set(LOBSIM_CORE_SOURCES
-  cpp/src/paper_trading_simulator_core.cpp
+  cpp/src/paper_trading_simulator.cpp
   cpp/src/in_memory_sink.cpp
 )
 
@@ -108,7 +108,7 @@ if(LOBSIM_BUILD_TESTS)
   FetchContent_MakeAvailable(Catch2)
 
   add_executable(lobsim_core_tests
-    cpp/tests/test_paper_trading_simulator_core.cpp
+    cpp/tests/test_paper_trading_simulator.cpp
     cpp/tests/test_in_memory_sink.cpp
   )
   target_link_libraries(lobsim_core_tests PRIVATE lobsim::core Catch2::Catch2WithMain)

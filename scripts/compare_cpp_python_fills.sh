@@ -34,7 +34,7 @@ except ImportError as exc:
         "Install it in your environment and re-run."
     ) from exc
 
-from lobsim.engine import PaperTradingSimulatorCore
+from lobsim.engine import PaperTradingSimulator
 from lobsim.lob_event import NormalizedLobEvent
 from lobsim.replay import ReplayConfig, ReplaySession
 from lobsim.sink import InMemoryLogSink
@@ -184,7 +184,7 @@ def main() -> None:
     data_path = os.environ["DATA_PATH"]
     out_path = os.environ["OUT_PATH"]
 
-    engine = PaperTradingSimulatorCore()
+    engine = PaperTradingSimulator()
     sink = InMemoryLogSink()
     engine.set_log_sink(sink)
 

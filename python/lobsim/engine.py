@@ -1,13 +1,13 @@
 from inspect import Parameter, Signature
 from typing import Sequence
 
-from ._core import PaperTradingSimulatorCore as _PaperTradingSimulatorCore
+from ._core import PaperTradingSimulator as _PaperTradingSimulator
 from .lob_event import NormalizedLobEvent
 from .sink import InMemoryLogSink
 from .types import Side
 
 
-class PaperTradingSimulatorCore(_PaperTradingSimulatorCore):
+class PaperTradingSimulator(_PaperTradingSimulator):
     def __init__(
         self,
         sides: Sequence[Side] | None = None,
@@ -57,7 +57,7 @@ class PaperTradingSimulatorCore(_PaperTradingSimulatorCore):
         return super().get_best_price_ticks(side)
 
 
-PaperTradingSimulatorCore.__signature__ = Signature(
+PaperTradingSimulator.__signature__ = Signature(
     parameters=[
         Parameter("sides", Parameter.POSITIONAL_OR_KEYWORD, default=None),
         Parameter("prices", Parameter.POSITIONAL_OR_KEYWORD, default=None),
@@ -66,4 +66,4 @@ PaperTradingSimulatorCore.__signature__ = Signature(
     ]
 )
 
-__all__ = ["PaperTradingSimulatorCore"]
+__all__ = ["PaperTradingSimulator"]

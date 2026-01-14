@@ -1,7 +1,7 @@
 #if __has_include(<pybind11/pybind11.h>)
 
 #include "lobsim/lob_event.hpp"
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 #include "lobsim/replay_session.hpp"
 #include "lobsim/types.hpp"
 
@@ -64,7 +64,7 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("last_ts_received", &lobsim::replay::RunSummary::lastTsReceived);
 
     py::class_<lobsim::replay::ReplaySession>(replay, "ReplaySession")
-        .def(py::init([](PaperTradingSimulatorCore& engine, const lobsim::replay::ReplayConfig& cfg) {
+        .def(py::init([](PaperTradingSimulator& engine, const lobsim::replay::ReplayConfig& cfg) {
                  return lobsim::replay::ReplaySession(engine, cfg);
              }),
              py::arg("engine"), py::arg("config") = lobsim::replay::ReplayConfig{}, py::keep_alive<1, 2>())
@@ -199,11 +199,11 @@ PYBIND11_MODULE(_core, m) {
         });
 
     // Engine bindings
-    py::class_<PaperTradingSimulatorCore>(m, "PaperTradingSimulatorCore")
+    py::class_<PaperTradingSimulator>(m, "PaperTradingSimulator")
         .def(py::init<>())
         .def(py::init([](const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
                          const std::vector<std::int64_t>& quantities, InMemoryLogSink* sink) {
-                 PaperTradingSimulatorCore eng;
+                 PaperTradingSimulator eng;
                  if (sink != nullptr) {
                      eng.setLogSink(sink);
                  }
@@ -215,34 +215,34 @@ PYBIND11_MODULE(_core, m) {
 
         // Ensure sink lifetime: sink stays alive as long as engine lives (Python-side).
         .def(
-            "set_log_sink", [](PaperTradingSimulatorCore& eng, InMemoryLogSink& sink) { eng.setLogSink(&sink); },
+            "set_log_sink", [](PaperTradingSimulator& eng, InMemoryLogSink& sink) { eng.setLogSink(&sink); },
             py::arg("sink"), py::keep_alive<1, 2>())
 
         // Apply a NormalizedLobEvent directly
         .def(
-            "update", [](PaperTradingSimulatorCore& eng, const NormalizedLobEvent& ev) { eng.update(ev); },
+            "update", [](PaperTradingSimulator& eng, const NormalizedLobEvent& ev) { eng.update(ev); },
             py::arg("event"))
 
         .def(
             "init_from_l2_snapshot",
-            [](PaperTradingSimulatorCore& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+            [](PaperTradingSimulator& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
                const std::vector<std::int64_t>& quantities) { eng.initFromL2Snapshot(sides, prices, quantities); },
             py::arg("sides"), py::arg("prices"), py::arg("quantities"))
 
         .def(
             "init_from_l3_snapshot",
-            [](PaperTradingSimulatorCore& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+            [](PaperTradingSimulator& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
                const std::vector<std::int64_t>& quantities, const std::vector<std::int64_t>& orderIds,
                const std::vector<std::int64_t>& traderIds) {
                 eng.initFromL3Snapshot(sides, prices, quantities, orderIds, traderIds);
             },
             py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("orderIds"), py::arg("traderIds"))
 
-        .def("depth_at", &PaperTradingSimulatorCore::depthAt, py::arg("side"), py::arg("price_ticks"))
+        .def("depth_at", &PaperTradingSimulator::depthAt, py::arg("side"), py::arg("price_ticks"))
 
-        .def("l2_top_n", &PaperTradingSimulatorCore::l2TopN, py::arg("side"), py::arg("n"))
+        .def("l2_top_n", &PaperTradingSimulator::l2TopN, py::arg("side"), py::arg("n"))
 
-        .def("get_best_price_ticks", &PaperTradingSimulatorCore::getBestPriceTicks, py::arg("side"));
+        .def("get_best_price_ticks", &PaperTradingSimulator::getBestPriceTicks, py::arg("side"));
 }
 
 #else

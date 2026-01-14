@@ -18,7 +18,7 @@ except ImportError as exc:
         "pyarrow is required for the BTCUSDT parquet benchmark. Install it in your environment."
     ) from exc
 
-from lobsim.engine import PaperTradingSimulatorCore
+from lobsim.engine import PaperTradingSimulator
 from lobsim.lob_event import NormalizedLobEvent
 from lobsim.replay import ReplayConfig, ReplaySession
 from lobsim.sink import InMemoryLogSink
@@ -195,7 +195,7 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    engine = PaperTradingSimulatorCore()
+    engine = PaperTradingSimulator()
     sink = InMemoryLogSink() if args.with_sink else None
     if sink is not None:
         engine.set_log_sink(sink)

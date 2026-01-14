@@ -2,7 +2,7 @@
 #include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
 #include "lobsim/instrument.hpp"
 #include "lobsim/log_sink.hpp"
-#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/paper_trading_simulator.hpp"
 #include "lobsim/replay_session.hpp"
 
 #include <algorithm>
@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    PaperTradingSimulatorCore engine;
+    PaperTradingSimulator engine;
     CountingSink sink;
     if (opt.useSink) {
         engine.setLogSink(&sink);

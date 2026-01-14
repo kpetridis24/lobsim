@@ -15,7 +15,7 @@ __all__: list[str] = [
     "MATCH",
     "NoAggressorNeededSentinel",
     "NormalizedLobEvent",
-    "PaperTradingSimulatorCore",
+    "PaperTradingSimulator",
     "SELL",
     "SET",
     "STRATEGY",
@@ -75,7 +75,7 @@ class NormalizedLobEvent:
     updateType: UpdateType
     def __init__(self) -> None: ...
 
-class PaperTradingSimulatorCore:
+class PaperTradingSimulator:
     def __init__(self) -> None: ...
     def depth_at(self, arg0: Side, arg1: int) -> int | None: ...
     def init_from_l2_snapshot(
