@@ -30,4 +30,4 @@ if [[ "${max_events}" != "0" ]]; then
 fi
 
 echo "== Python benchmark =="
-"${PYTHON_BIN}" "${root_dir}/examples/lobsim_bench_py.py" "${py_args[@]}"
+"${PYTHON_BIN}" "${root_dir}/benchmark/lobsim_bench_py.py" "${py_args[@]}"
