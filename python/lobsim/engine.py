@@ -32,7 +32,9 @@ class PaperTradingSimulatorCore(_PaperTradingSimulatorCore):
     def update(self, event: NormalizedLobEvent) -> None:  # type: ignore[override]
         super().update(event)
 
-    def init_from_l2_snapshot(self, sides: Sequence[Side], prices: Sequence[int], quantities: Sequence[int]) -> None:
+    def init_from_l2_snapshot(
+        self, sides: Sequence[Side], prices: Sequence[int], quantities: Sequence[int]
+    ) -> None:
         super().init_from_l2_snapshot(sides, prices, quantities)
 
     def init_from_l3_snapshot(

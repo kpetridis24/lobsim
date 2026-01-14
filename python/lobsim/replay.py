@@ -8,7 +8,11 @@ ReplaySession = _replay.ReplaySession
 
 ReplayConfig.__signature__ = Signature(
     parameters=[
-        Parameter("require_monotonic_ts_received", Parameter.POSITIONAL_OR_KEYWORD, default=True),
+        Parameter(
+            "require_monotonic_ts_received",
+            Parameter.POSITIONAL_OR_KEYWORD,
+            default=True,
+        ),
         Parameter("fail_fast", Parameter.POSITIONAL_OR_KEYWORD, default=True),
     ]
 )

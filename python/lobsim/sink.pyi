@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .types import Side, UpdateSource, UpdateType
 
-
 class FillRecord:
     seq: int
     tsExchange: int
@@ -18,7 +17,6 @@ class FillRecord:
     takerTraderId: int
     takerSource: UpdateSource
 
-
 class EventApplyRecord:
     seq: int
     tsExchange: int
@@ -32,11 +30,9 @@ class EventApplyRecord:
     traderId: int
     aggressorId: int
 
-
 class InMemoryLogSink:
     def __init__(self) -> None: ...
     def reset(self) -> None: ...
     def get_fills(self) -> list[FillRecord]: ...
-
 
 __all__: list[str]
