@@ -15,16 +15,29 @@
 namespace lobsim::replay {
 
 static UpdateType parseUpdateType(std::string_view s) {
-    if (s == "SNAPSHOT")
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
+        s.remove_prefix(1);
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))
+        s.remove_suffix(1);
+
+    std::string upper;
+    upper.reserve(s.size());
+    for (char c : s) {
+        upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+    }
+
+    if (upper == "SNAPSHOT")
         return UpdateType::SET;
-    if (s == "ADD")
+    if (upper == "ADD")
         return UpdateType::ADD;
-    if (s == "DELETE")
+    if (upper == "DELETE")
         return UpdateType::DELETE;
-    if (s == "MATCH")
+    if (upper == "MATCH")
         return UpdateType::MATCH;
-    if (s == "SUBTRACT")
+    if (upper == "SUBTRACT")
         return UpdateType::SUBTRACT;
+    if (upper == "SET")
+        return UpdateType::SET;
     throw std::runtime_error("Unknown update_type: " + std::string(s));
 }
 
@@ -77,7 +90,8 @@ static std::int64_t parseHhMmSsToUs(std::string_view sv) {
 }
 
 struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
-    std::unique_ptr<arrow::RecordBatchReader> rb_reader;
+    std::unique_ptr<parquet::arrow::FileReader> reader;
+    std::shared_ptr<arrow::RecordBatchReader> rb_reader;
     std::shared_ptr<arrow::RecordBatch> batch;
     std::int64_t rowInBatch = 0;
     std::int64_t globalRow = 0;
@@ -102,11 +116,18 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         }
         auto infile = *infile_res;
 
-        auto reader_res = parquet::arrow::OpenFile(infile, arrow::default_memory_pool());
-        if (!reader_res.ok()) {
-            throw std::runtime_error(reader_res.status().ToString());
+        parquet::arrow::FileReaderBuilder builder;
+        builder.memory_pool(arrow::default_memory_pool());
+        auto st = builder.Open(infile);
+        if (!st.ok()) {
+            throw std::runtime_error(st.ToString());
         }
-        std::unique_ptr<parquet::arrow::FileReader> reader = std::move(reader_res).ValueOrDie();
+        std::unique_ptr<parquet::arrow::FileReader> reader_local;
+        st = builder.Build(&reader_local);
+        if (!st.ok()) {
+            throw std::runtime_error(st.ToString());
+        }
+        reader = std::move(reader_local);
         reader->set_batch_size(batchSizeRows);
 
         std::shared_ptr<arrow::Schema> schema;
@@ -161,11 +182,12 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         std::vector<int> cols{col_time_exchange, col_time_coinapi, col_update_type, col_is_buy,
                               col_entry_px,      col_entry_sx,     col_order_id};
 
-        auto rb_reader_res = reader->GetRecordBatchReader(row_groups, cols);
-        if (!rb_reader_res.ok()) {
-            throw std::runtime_error(rb_reader_res.status().ToString());
+        std::shared_ptr<arrow::RecordBatchReader> rb_reader_local;
+        st = reader->GetRecordBatchReader(row_groups, cols, &rb_reader_local);
+        if (!st.ok()) {
+            throw std::runtime_error(st.ToString());
         }
-        rb_reader = std::move(rb_reader_res).ValueOrDie();
+        rb_reader = std::move(rb_reader_local);
     }
 
     bool loadNextBatch() {
@@ -296,6 +318,8 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
 
 CoinapiCoinbaseBTCUSDTParquetSource::CoinapiCoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batchSizeRows)
     : impl(std::make_unique<Impl>(std::move(path), batchSizeRows)) {}
+
+CoinapiCoinbaseBTCUSDTParquetSource::~CoinapiCoinbaseBTCUSDTParquetSource() = default;
 
 bool CoinapiCoinbaseBTCUSDTParquetSource::next(CoinapiCoinbaseBTCUSDTRawEvent& out) {
     return impl->next(out);

@@ -5,6 +5,7 @@
 #include "lobsim/instrument.hpp"
 #include "lobsim/lob_event.hpp"
 
+#include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -50,8 +51,7 @@ struct CoinapiCoinbaseBTCUSDTAdapter {
         out.priceTicks = pxRes.value;
         out.quantityLots = szRes.value;
 
-        // stable-enough id mapping for this dataset: hash the string
-        out.orderId = static_cast<std::int64_t>(std::hash<std::string>{}(raw.orderId));
+        out.orderId = stableOrderId(raw.orderId);
 
         out.traderId = UnknownTraderIdSentinel;
         out.aggressorId = UnknownAggressorIdSentinel;
@@ -62,6 +62,15 @@ struct CoinapiCoinbaseBTCUSDTAdapter {
     }
 
 private:
+    static std::int64_t stableOrderId(std::string_view value) {
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (unsigned char c : value) {
+            hash ^= c;
+            hash *= 1099511628211ULL;
+        }
+        return std::bit_cast<std::int64_t>(hash);
+    }
+
     InstrumentSpec spec_{};
 };
 
