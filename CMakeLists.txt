@@ -153,3 +153,6 @@ target_link_libraries(lobsim_cpp_example PRIVATE lobsim::core lobsim::parquet)
 
 add_executable(lobsim_lobster_example examples/lobsim_lobster_cpp.cpp)
 target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
+
+add_executable(lobsim_bench_cpp examples/lobsim_bench_cpp.cpp)
+target_link_libraries(lobsim_bench_cpp PRIVATE lobsim::core lobsim::parquet)

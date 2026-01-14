@@ -1,0 +1,247 @@
+#include "lobsim/coinapi_coinbase_btcusdt_adapter.hpp"
+#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/instrument.hpp"
+#include "lobsim/log_sink.hpp"
+#include "lobsim/paper_trading_simulator_core.hpp"
+#include "lobsim/replay_session.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <numeric>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <sys/resource.h>
+#include <utility>
+
+namespace {
+
+struct CountingSink final : public ILogSink {
+    void onFill(const FillRecord&) override { ++fills; }
+    void onEventApply(const EventApplyRecord&) override { ++events; }
+    void onDiagnostic(const DiagnosticRecord&) override { ++diagnostics; }
+    void reset() override {
+        fills = 0;
+        events = 0;
+        diagnostics = 0;
+    }
+
+    std::uint64_t fills{0};
+    std::uint64_t events{0};
+    std::uint64_t diagnostics{0};
+};
+
+struct Options {
+    std::string path{"sample_data/coinapi_coinbase_btcusdt_sample.parquet"};
+    std::string tickSize{"0.01"};
+    std::string lotSize{"0.00000001"};
+    std::string symbol{"BTC-USDT"};
+    std::int64_t maxEvents{0};
+    bool useSink{true};
+};
+
+void printUsage(const char* argv0) {
+    std::cerr << "Usage: " << argv0 << " [--path FILE] [--tick-size X] [--lot-size X] [--symbol SYMBOL]\n"
+              << "       [--max-events N] [--no-sink]\n";
+}
+
+std::int64_t pow10i(int exp) {
+    std::int64_t result = 1;
+    for (int i = 0; i < exp; ++i) {
+        if (result > (std::numeric_limits<std::int64_t>::max() / 10)) {
+            throw std::runtime_error("Decimal scale too large.");
+        }
+        result *= 10;
+    }
+    return result;
+}
+
+lobsim::replay::Rational parseDecimal(std::string_view s) {
+    if (s.empty()) {
+        throw std::runtime_error("Empty decimal string.");
+    }
+    std::string str(s);
+    auto pos = str.find('.');
+    std::int64_t num = 0;
+    std::int64_t den = 1;
+    if (pos == std::string::npos) {
+        num = std::stoll(str);
+    } else {
+        const int fracDigits = static_cast<int>(str.size() - pos - 1);
+        std::string digits = str;
+        digits.erase(pos, 1);
+        num = std::stoll(digits);
+        den = pow10i(fracDigits);
+    }
+
+    if (num <= 0 || den <= 0) {
+        throw std::runtime_error("Tick/lot size must be positive.");
+    }
+
+    const auto g = std::gcd(num, den);
+    num /= g;
+    den /= g;
+    return lobsim::replay::Rational{num, den};
+}
+
+Options parseOptions(int argc, char** argv) {
+    Options opt{};
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        auto nextValue = [&](const char* name) -> std::string {
+            if (i + 1 >= argc) {
+                throw std::runtime_error(std::string("Missing value for ") + name);
+            }
+            return argv[++i];
+        };
+
+        if (arg == "--path") {
+            opt.path = nextValue("--path");
+        } else if (arg == "--tick-size") {
+            opt.tickSize = nextValue("--tick-size");
+        } else if (arg == "--lot-size") {
+            opt.lotSize = nextValue("--lot-size");
+        } else if (arg == "--symbol") {
+            opt.symbol = nextValue("--symbol");
+        } else if (arg == "--max-events") {
+            opt.maxEvents = std::stoll(nextValue("--max-events"));
+        } else if (arg == "--no-sink") {
+            opt.useSink = false;
+        } else if (arg == "--help" || arg == "-h") {
+            printUsage(argv[0]);
+            std::exit(0);
+        } else if (arg.rfind("-", 0) == 0) {
+            throw std::runtime_error("Unknown option: " + arg);
+        } else {
+            opt.path = arg;
+        }
+    }
+    return opt;
+}
+
+double timeDiff(const timeval& a, const timeval& b) {
+    return static_cast<double>(b.tv_sec - a.tv_sec) + (static_cast<double>(b.tv_usec - a.tv_usec) / 1'000'000.0);
+}
+
+std::uint64_t maxRssBytes(const rusage& usage) {
+#if defined(__APPLE__)
+    return static_cast<std::uint64_t>(usage.ru_maxrss);
+#else
+    return static_cast<std::uint64_t>(usage.ru_maxrss) * 1024ULL;
+#endif
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    Options opt{};
+    try {
+        opt = parseOptions(argc, argv);
+    } catch (const std::exception& e) {
+        std::cerr << "Argument error: " << e.what() << "\n";
+        printUsage(argv[0]);
+        return 2;
+    }
+
+    PaperTradingSimulatorCore engine;
+    CountingSink sink;
+    if (opt.useSink) {
+        engine.setLogSink(&sink);
+    }
+
+    lobsim::replay::InstrumentSpec spec{};
+    spec.symbol = opt.symbol;
+    spec.venue = "coinapi";
+    spec.tickSize = parseDecimal(opt.tickSize);
+    spec.lotSize = parseDecimal(opt.lotSize);
+    spec.pricePolicy = lobsim::replay::RoundingPolicy::Nearest;
+    spec.qtyPolicy = lobsim::replay::RoundingPolicy::Nearest;
+
+    lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
+    lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource source(opt.path);
+    lobsim::replay::ReplayConfig cfg{};
+    cfg.requireMonotonicTsReceived = true;
+    cfg.failFast = true;
+    lobsim::replay::ReplaySession replay(engine, cfg);
+
+    CoinapiCoinbaseBTCUSDTRawEvent raw{};
+    lobsim::replay::RunSummary summary{};
+
+    bool hasRange = false;
+
+    rusage usageStart{};
+    getrusage(RUSAGE_SELF, &usageStart);
+    const auto wallStart = std::chrono::steady_clock::now();
+
+    while (source.next(raw)) {
+        if (opt.maxEvents > 0 && summary.numRawEvents >= static_cast<std::uint64_t>(opt.maxEvents)) {
+            break;
+        }
+        ++summary.numRawEvents;
+        NormalizedLobEvent ev{};
+
+        try {
+            ev = adapter.normalize(raw);
+        } catch (const std::exception&) {
+            ++summary.numAdapterFailures;
+            if (cfg.failFast) {
+                throw;
+            }
+            continue;
+        }
+
+        ++summary.numNormalizedEvents;
+        if (!hasRange) {
+            hasRange = true;
+            summary.hasTsRange = true;
+            summary.firstTsReceived = ev.tsReceived;
+            summary.lastTsReceived = ev.tsReceived;
+        } else {
+            summary.firstTsReceived = std::min(summary.firstTsReceived, ev.tsReceived);
+            summary.lastTsReceived = std::max(summary.lastTsReceived, ev.tsReceived);
+        }
+
+        replay.step(ev);
+        ++summary.numEngineUpdates;
+    }
+
+    const auto wallEnd = std::chrono::steady_clock::now();
+    rusage usageEnd{};
+    getrusage(RUSAGE_SELF, &usageEnd);
+
+    const double wallSeconds = std::chrono::duration<double>(wallEnd - wallStart).count();
+    const double cpuSeconds = timeDiff(usageStart.ru_utime, usageEnd.ru_utime) + timeDiff(usageStart.ru_stime, usageEnd.ru_stime);
+    const std::uint64_t rssBytes = maxRssBytes(usageEnd);
+    const double eventsPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.numEngineUpdates) / wallSeconds) : 0.0;
+    const double rawPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.numRawEvents) / wallSeconds) : 0.0;
+
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << "benchmark=c++\n";
+    std::cout << "raw_events=" << summary.numRawEvents << "\n";
+    std::cout << "normalized_events=" << summary.numNormalizedEvents << "\n";
+    std::cout << "engine_updates=" << summary.numEngineUpdates << "\n";
+    std::cout << "adapter_failures=" << summary.numAdapterFailures << "\n";
+    std::cout << "wall_seconds=" << wallSeconds << "\n";
+    std::cout << "cpu_seconds=" << cpuSeconds << "\n";
+    std::cout << "cpu_utilization=" << (wallSeconds > 0.0 ? (cpuSeconds / wallSeconds) : 0.0) << "\n";
+    std::cout << "events_per_sec=" << eventsPerSec << "\n";
+    std::cout << "raw_events_per_sec=" << rawPerSec << "\n";
+    std::cout << "max_rss_bytes=" << rssBytes << "\n";
+
+    if (opt.useSink) {
+        std::cout << "fill_count=" << sink.fills << "\n";
+        std::cout << "event_apply_count=" << sink.events << "\n";
+        std::cout << "diagnostic_count=" << sink.diagnostics << "\n";
+    } else {
+        std::cout << "fill_count=0\n";
+        std::cout << "event_apply_count=0\n";
+        std::cout << "diagnostic_count=0\n";
+    }
+
+    return 0;
+}
