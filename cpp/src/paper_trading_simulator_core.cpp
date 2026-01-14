@@ -47,7 +47,7 @@ void PaperTradingSimulatorCore::update(const NormalizedLobEvent& event) {
         break;
 
     default:
-        throw std::runtime_error("Unknown updateType found.");
+        emitDiagnostic(event, DiagnosticRecordCode::INVALID_UPDATE_TYPE, DiagnosticRecordSeverity::ERROR);
     }
 
     ++seq;
@@ -55,7 +55,9 @@ void PaperTradingSimulatorCore::update(const NormalizedLobEvent& event) {
 
 void PaperTradingSimulatorCore::onAdd(const NormalizedLobEvent& event) {
     if (event.quantityLots < 0) {
-        throw std::runtime_error("Negative ADD quantity found.");
+        emitDiagnostic(event, DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
 
     const bool paper = event.updateSource == UpdateSource::STRATEGY;
@@ -422,7 +424,9 @@ void PaperTradingSimulatorCore::removePaperOrder(PaperOrderLevel& level, PaperOr
 
 void PaperTradingSimulatorCore::reducePaperOrder(std::int64_t orderId, std::int64_t reduceQty) {
     if (reduceQty < 0) {
-        throw std::runtime_error("Negative quantityLots found.");
+        emitDiagnostic(NormalizedLobEvent{}, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
     if (reduceQty == 0) {
         return;
@@ -588,7 +592,9 @@ void PaperTradingSimulatorCore::onDelete(const NormalizedLobEvent& event) {
 
     auto bIt = book.find(storedPriceTicks);
     if (bIt == book.end()) {
-        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+        emitDiagnostic(event, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
 
     OrderPriorityQueue& queue = bIt->second;
@@ -660,7 +666,9 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
 
     auto bIt = book.find(storedPriceTicks);
     if (bIt == book.end()) {
-        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+        emitDiagnostic(event, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
 
     OrderPriorityQueue& queue = bIt->second;
@@ -689,7 +697,9 @@ void PaperTradingSimulatorCore::onSet(const NormalizedLobEvent& event) {
 
 void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& event, bool isTradeOnPassiveOrder) {
     if (event.quantityLots < 0) {
-        throw std::runtime_error("Negative quantityLots found.");
+        emitDiagnostic(NormalizedLobEvent{}, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
     if (event.quantityLots == 0) {
         emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY,
@@ -708,13 +718,15 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
 
     auto storedSide = std::get<0>(info);
     if (storedSide != event.side) {
-        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
+        emitDiagnostic(event,
+                       DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID,
                        DiagnosticRecordSeverity::WARNING);
     }
 
     auto storedPriceTicks = std::get<1>(info);
     if (storedPriceTicks != event.priceTicks) {
-        emitDiagnostic(event, DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
+        emitDiagnostic(event,
+                       DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID,
                        DiagnosticRecordSeverity::WARNING);
     }
 
@@ -727,7 +739,9 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
 
     auto bIt = book.find(storedPriceTicks);
     if (bIt == book.end()) {
-        throw std::runtime_error("Corrupt book. Price found in orderInfo but not present in book.");
+        emitDiagnostic(event, DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
     }
 
     OrderPriorityQueue& queue = bIt->second;
@@ -737,7 +751,8 @@ void PaperTradingSimulatorCore::onPartialOrderCancel(const NormalizedLobEvent& e
     auto take = std::min<std::int64_t>(liquidity, event.quantityLots);
 
     if (event.quantityLots > liquidity) {
-        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID,
+        emitDiagnostic(event,
+                       DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID,
                        DiagnosticRecordSeverity::WARNING);
     }
 
