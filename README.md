@@ -1,4 +1,8 @@
-# lobsim — Limit Order Book Simulator
+<p align="center">
+  <img src="assets/lobsim-logo.png" width="300" alt="LOBSIM logo">
+</p>
+
+# LOBSIM — Limit Order Book Simulator
 
 [![CI](https://github.com/kpetridis24/lobsim/actions/workflows/ci.yml/badge.svg)](https://github.com/kpetridis24/lobsim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
