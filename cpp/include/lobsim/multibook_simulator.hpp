@@ -176,6 +176,19 @@ public:
         streams_.push_back(std::move(state));
     }
 
+    template <typename Source>
+        requires lobsim::replay::IEventSource<Source, NormalizedLobEvent>
+    void addStream(const BookId& id, Source& src) {
+        const std::string key = bookKey(id);
+        if (!hasBookKey(key)) {
+            addBook(id);
+        }
+        StreamState state{};
+        state.bookKey = key;
+        state.stream = std::make_unique<NormalizedStream<Source>>(src);
+        streams_.push_back(std::move(state));
+    }
+
 private:
     struct BookEntry {
         BookId id{};
@@ -225,6 +238,14 @@ private:
         Source* source_{nullptr};
         const Adapter* adapter_{nullptr};
         bool failFast_{true};
+    };
+
+    template <typename Source> struct NormalizedStream final : IStream {
+        explicit NormalizedStream(Source& source) : source_(&source) {}
+
+        bool nextNormalized(NormalizedLobEvent& out) override { return source_->next(out); }
+
+        Source* source_{nullptr};
     };
 
     struct StreamState {
