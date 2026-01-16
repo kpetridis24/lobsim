@@ -10,14 +10,8 @@
 
 namespace {
 
-NormalizedLobEvent makeEvent(std::string symbol,
-                             std::int64_t tsExchange,
-                             std::int64_t tsReceived,
-                             Side side,
-                             UpdateType type,
-                             std::int64_t price,
-                             std::int64_t qty,
-                             std::int64_t orderId) {
+NormalizedLobEvent makeEvent(std::string symbol, std::int64_t tsExchange, std::int64_t tsReceived, Side side,
+                             UpdateType type, std::int64_t price, std::int64_t qty, std::int64_t orderId) {
     NormalizedLobEvent ev{};
     ev.symbolId = std::move(symbol);
     ev.tsExchange = tsExchange;
@@ -166,7 +160,7 @@ TEST_CASE("Non-monotonic per-stream timestamps emit diagnostics when failFast=fa
                                 makeEvent("D", 2, 5, Side::BUY, UpdateType::ADD, 110, 1, 2)}); // tsReceived decreases
     sim.addStream(id, src);
 
-    REQUIRE(sim.step());  // applies first event
+    REQUIRE(sim.step());       // applies first event
     REQUIRE_FALSE(sim.step()); // second is rejected; no more buffered
 
     auto diags = sink.diagnostics();
@@ -215,7 +209,7 @@ TEST_CASE("stepUntil/stepFor advance correct counts and currentTime updates") {
     REQUIRE(sim.currentTime().has_value());
     REQUIRE(sim.currentTime().value() == 5);
 
-    REQUIRE(sim.stepFor(4) == 0); // no events in (5,9]
+    REQUIRE(sim.stepFor(4) == 0);    // no events in (5,9]
     REQUIRE(sim.stepUntil(12) == 1); // picks tsReceived=10
     REQUIRE(sim.currentTime().value() == 10);
 
@@ -392,7 +386,7 @@ TEST_CASE("setMultiLogSink(nullptr) detaches wrappers safely") {
 
     sim.setMultiLogSink(nullptr);
 
-    REQUIRE(sim.step());              // still applies, but no more logging to multi
+    REQUIRE(sim.step()); // still applies, but no more logging to multi
     REQUIRE(multi.events().size() == 1);
 
     auto best = sim.getBestPriceTicks(id, Side::BUY);
