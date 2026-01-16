@@ -121,6 +121,10 @@ endif()
 # ---- Python extension (pybind11) ----
 # This builds a module that will be imported as: `import lobsim._core`
 if(LOBSIM_BUILD_PYTHON)
+  # Force pybind11 to use modern FindPython (avoids CMP0148 warnings and
+  # prevents broken framework-Python include paths like conda's python.app).
+  set(PYBIND11_FINDPYTHON ON)
+
   find_package(pybind11 CONFIG REQUIRED)
 
   # The pybind module target name can be anything; OUTPUT_NAME controls the filename.

@@ -19,6 +19,12 @@ except Exception:
 PY
 )"
 
+python_exe="$("${PYTHON_BIN}" - <<'PY'
+import sys
+print(sys.executable)
+PY
+)"
+
 if [[ -z "${pybind11_dir}" ]]; then
   echo "pybind11 CMake config not found. Install pybind11 for your Python interpreter."
   echo "Example: python3 -m pip install pybind11"
@@ -28,5 +34,7 @@ fi
 cmake -S "${root_dir}" -B "${build_dir}" -G Ninja \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DLOBSIM_BUILD_PYTHON=ON \
+  -DPYBIND11_FINDPYTHON=ON \
+  -DPython_EXECUTABLE="${python_exe}" \
   -Dpybind11_DIR="${pybind11_dir}"
 cmake --build "${build_dir}"
