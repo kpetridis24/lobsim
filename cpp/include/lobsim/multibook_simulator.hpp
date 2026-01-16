@@ -19,6 +19,11 @@
 #include <utility>
 #include <vector>
 
+/**
+ * TODO:
+ * - Implement insertStrategyOrder API or equivalent
+ */
+
 class MultiBookSimulator {
 public:
     struct Config {
@@ -79,6 +84,14 @@ public:
     }
 
     void setMultiLogSink(IMultiLogSink* sink) {
+        // If we currently own per-book wrappers, detach them before destroying them.
+        // This matters if the caller sets the multi sink to nullptr; otherwise we'd
+        // leave each engine with a dangling sink pointer.
+        for (auto& [key, entry] : books_) {
+            if (bookSinks_.find(key) != bookSinks_.end()) {
+                entry.engine->setLogSink(nullptr);
+            }
+        }
         multiSink_ = sink;
         bookSinks_.clear();
         for (auto& [key, entry] : books_) {
@@ -183,6 +196,14 @@ public:
         static_assert(IEventAdapter<Adapter, RawEvent>, "Adapter normalize signature mismatch.");
         static_assert(lobsim::replay::IEventSource<Source, RawEvent>, "Source next(raw) signature mismatch.");
         const std::string key = bookKey(id);
+        if (hasStreamForBookKey(key)) {
+            emitDiagnostic(key, DiagnosticRecordCode::DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: duplicate stream registration.");
+            }
+            return;
+        }
         if (!hasBookKey(key)) {
             addBook(id);
         }
@@ -196,6 +217,14 @@ public:
         requires lobsim::replay::IEventSource<Source, NormalizedLobEvent>
     void addStream(const BookId& id, Source& src) {
         const std::string key = bookKey(id);
+        if (hasStreamForBookKey(key)) {
+            emitDiagnostic(key, DiagnosticRecordCode::DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: duplicate stream registration.");
+            }
+            return;
+        }
         if (!hasBookKey(key)) {
             addBook(id);
         }
@@ -288,7 +317,6 @@ private:
         std::int64_t tsReceived{0};
         std::int64_t tsExchange{0};
         std::size_t streamIndex{0};
-        std::uint64_t seq{0};
     };
 
     struct HeapCompare {
@@ -299,14 +327,20 @@ private:
             if (a.tsExchange != b.tsExchange) {
                 return a.tsExchange > b.tsExchange;
             }
-            if (a.streamIndex != b.streamIndex) {
-                return a.streamIndex > b.streamIndex;
-            }
-            return a.seq > b.seq;
+            return a.streamIndex > b.streamIndex;
         }
     };
 
     static std::string bookKey(const BookId& id) { return ::bookKey(id); }
+
+    bool hasStreamForBookKey(std::string_view key) const {
+        for (const auto& stream : streams_) {
+            if (stream.bookKey == key) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void applyToBook(const std::string& key, NormalizedLobEvent& ev) {
         auto* book = getBookKey(key);
@@ -361,7 +395,7 @@ private:
         stream.hasBuffered = true;
         ++stream.seq;
 
-        heap_.push(HeapEntry{stream.buffered.tsReceived, stream.buffered.tsExchange, index, stream.seq});
+        heap_.push(HeapEntry{stream.buffered.tsReceived, stream.buffered.tsExchange, index});
     }
 
     Config cfg_{};
