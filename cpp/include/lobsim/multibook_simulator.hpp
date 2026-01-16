@@ -75,7 +75,6 @@ public:
         bookSinks_.erase(bookKey(id));
     }
 
-    // Attach a multi-book sink; every book will get a BookScopedSink wrapper that tags events with bookId.
     void setMultiLogSink(IMultiLogSink* sink) {
         multiSink_ = sink;
         bookSinks_.clear();

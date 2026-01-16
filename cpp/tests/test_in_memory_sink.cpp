@@ -13,7 +13,7 @@ static EventApplyRecord make_event_apply(std::uint64_t seq, UpdateType updateTyp
                                          std::int64_t traderId = UnknownTraderIdSentinel,
                                          std::int64_t aggressorId = NoAggressorNeededSentinel,
                                          std::string bookKey = {}) {
-    return EventApplyRecord{seq,        tsEx,    tsRecv,  side,     updateType, source,
+    return EventApplyRecord{seq,        tsEx,    tsRecv,  side,     updateType,  source,
                             priceTicks, qtyLots, orderId, traderId, aggressorId, std::move(bookKey)};
 }
 
@@ -22,9 +22,9 @@ static FillRecord make_fill(std::uint64_t seq, std::int64_t priceTicks, std::int
                             Side makerSide = Side::BUY, Side takerSide = Side::SELL, std::int64_t tsEx = 1,
                             std::int64_t tsRecv = 2, std::int64_t makerTraderId = UnknownTraderIdSentinel,
                             std::int64_t takerTraderId = UnknownTraderIdSentinel, std::string bookKey = {}) {
-    return FillRecord{seq,           tsEx,        tsRecv,    priceTicks,   qtyLots,       makerSide,  makerOrderId,
-                      makerTraderId, makerSource, takerSide, takerOrderId, takerTraderId, takerSource,
-                      std::move(bookKey)};
+    return FillRecord{seq,          tsEx,          tsRecv,        priceTicks,        qtyLots,
+                      makerSide,    makerOrderId,  makerTraderId, makerSource,       takerSide,
+                      takerOrderId, takerTraderId, takerSource,   std::move(bookKey)};
 }
 
 TEST_CASE("Ledger tracks strategy add and maker fills") {
