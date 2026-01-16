@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -69,7 +70,9 @@ public:
     void setLogSink(const BookId& id, ILogSink* sink) {
         auto* book = getBook(id);
         if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book in setLogSink.");
+            emitDiagnostic(bookKey(id), DiagnosticRecordCode::SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return;
         }
         book->setLogSink(sink);
         bookSinks_.erase(bookKey(id));
@@ -86,7 +89,9 @@ public:
     std::optional<std::int64_t> depthAt(const BookId& id, Side side, std::int64_t priceTicks) const {
         const auto* book = getBook(id);
         if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book in depthAt.");
+            emitDiagnostic(bookKey(id), DiagnosticRecordCode::DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return std::nullopt;
         }
         return book->depthAt(side, priceTicks);
     }
@@ -94,7 +99,9 @@ public:
     std::vector<std::pair<std::int64_t, std::int64_t>> l2TopN(const BookId& id, Side side, std::uint32_t n) const {
         const auto* book = getBook(id);
         if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book in l2TopN.");
+            emitDiagnostic(bookKey(id), DiagnosticRecordCode::L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return {};
         }
         return book->l2TopN(side, n);
     }
@@ -102,7 +109,10 @@ public:
     std::optional<std::int64_t> getBestPriceTicks(const BookId& id, Side side) const {
         const auto* book = getBook(id);
         if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book in getBestPriceTicks.");
+            emitDiagnostic(bookKey(id),
+                           DiagnosticRecordCode::GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return std::nullopt;
         }
         return book->getBestPriceTicks(side);
     }
@@ -127,7 +137,12 @@ public:
 
         auto& stream = streams_[entry.streamIndex];
         if (!stream.hasBuffered) {
-            throw std::runtime_error("MultiBookSimulator: heap entry without buffered event.");
+            emitDiagnostic(stream.bookKey, DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT,
+                           DiagnosticRecordSeverity::ERROR, stream.seq, currentTsReceived_, -1);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: heap entry without buffered event.");
+            }
+            return false;
         }
 
         NormalizedLobEvent ev = std::move(stream.buffered);
@@ -163,9 +178,10 @@ public:
         return stepUntil(base + deltaTs);
     }
 
-    template <typename Source, typename Adapter, typename RawEvent>
-        requires lobsim::replay::IEventSource<Source, RawEvent> && IEventAdapter<Adapter, RawEvent>
-    void addStream(const BookId& id, Source& src, const Adapter& adapter) {
+    template <typename Source, typename Adapter> void addStream(const BookId& id, Source& src, const Adapter& adapter) {
+        using RawEvent = NormalizeArgT<Adapter>;
+        static_assert(IEventAdapter<Adapter, RawEvent>, "Adapter normalize signature mismatch.");
+        static_assert(lobsim::replay::IEventSource<Source, RawEvent>, "Source next(raw) signature mismatch.");
         const std::string key = bookKey(id);
         if (!hasBookKey(key)) {
             addBook(id);
@@ -205,6 +221,15 @@ private:
     static constexpr bool HasTryNormalize = requires(const Adapter& a, const RawEvent& raw, NormalizedLobEvent& out) {
         { a.tryNormalize(raw, out) } -> std::same_as<bool>;
     };
+
+    template <typename T> struct NormalizeArg;
+    template <typename C, typename R, typename Arg> struct NormalizeArg<R (C::*)(const Arg&) const> {
+        using type = Arg;
+    };
+    template <typename C, typename R, typename Arg> struct NormalizeArg<R (C::*)(const Arg&)> {
+        using type = Arg;
+    };
+    template <typename Adapter> using NormalizeArgT = typename NormalizeArg<decltype(&Adapter::normalize)>::type;
 
     template <typename Source, typename Adapter, typename RawEvent> struct Stream final : IStream {
         Stream(Source& source, const Adapter& adapter, bool failFast)
@@ -286,13 +311,17 @@ private:
     void applyToBook(const std::string& key, NormalizedLobEvent& ev) {
         auto* book = getBookKey(key);
         if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book for stream event.");
+            emitDiagnostic(key, DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK,
+                           DiagnosticRecordSeverity::ERROR, 0, ev.tsReceived, ev.tsExchange);
+            return;
         }
         if (ev.symbolId.empty() || ev.symbolId != key) {
             ev.symbolId = key;
         }
         if (cfg_.requireMonotonicTsReceived && hasCurrentTime_ && ev.tsReceived < currentTsReceived_) {
-            throw std::runtime_error("MultiBookSimulator: non-monotonic tsReceived detected.");
+            emitDiagnostic(key, DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, 0, ev.tsReceived, ev.tsExchange);
+            return;
         }
         book->update(ev);
         hasCurrentTime_ = true;
@@ -320,7 +349,10 @@ private:
         }
 
         if (cfg_.requireMonotonicTsReceived && stream.hasLastTs && ev.tsReceived < stream.lastTs) {
-            throw std::runtime_error("MultiBookSimulator: non-monotonic tsReceived detected.");
+            emitDiagnostic(stream.bookKey,
+                           DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR,
+                           DiagnosticRecordSeverity::ERROR, stream.seq, ev.tsReceived, ev.tsExchange);
+            return;
         }
         stream.hasLastTs = true;
         stream.lastTs = ev.tsReceived;
@@ -348,5 +380,13 @@ private:
         auto wrapped = std::make_unique<BookScopedSink>(entry.key, multiSink_);
         entry.engine->setLogSink(wrapped.get());
         bookSinks_[entry.key] = std::move(wrapped);
+    }
+
+    void emitDiagnostic(const std::string& key, DiagnosticRecordCode code, DiagnosticRecordSeverity sev,
+                        std::uint64_t seq, std::int64_t tsReceived, std::int64_t tsExchange) const {
+        if (!multiSink_) {
+            return;
+        }
+        multiSink_->onDiagnostic(DiagnosticRecord{seq, tsExchange, tsReceived, code, sev, key});
     }
 };
