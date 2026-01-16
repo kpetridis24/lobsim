@@ -33,6 +33,13 @@ public:
 
     MultiBookSimulator() = default;
     explicit MultiBookSimulator(Config cfg) : cfg_(cfg) {}
+    ~MultiBookSimulator() {
+        for (auto& [_, entry] : books_) {
+            if (entry.engine) {
+                entry.engine->setLogSink(nullptr);
+            }
+        }
+    }
 
     bool addBook(const BookId& id) { return addBook(id, std::make_unique<PaperTradingSimulator>()); }
 
@@ -162,7 +169,10 @@ public:
         }
         const std::size_t idx = strategyEvents_.size();
         strategyEvents_.push_back(StrategyItem{std::move(ev), ++strategySeqCounter_});
-        const auto& ref = strategyEvents_.back();
+        auto& ref = strategyEvents_.back();
+        if (ref.ev.tsExchange == 0) {
+            ref.ev.tsExchange = std::numeric_limits<std::int64_t>::max();
+        }
         heap_.push(HeapEntry{ref.ev.tsReceived, ref.ev.tsExchange, 0, HeapEntry::EntryKind::Strategy, idx});
     }
 
@@ -374,11 +384,11 @@ private:
             if (a.tsReceived != b.tsReceived) {
                 return a.tsReceived > b.tsReceived;
             }
-            if (a.tsExchange != b.tsExchange) {
-                return a.tsExchange > b.tsExchange;
-            }
             if (a.kind != b.kind) {
                 return static_cast<int>(a.kind) > static_cast<int>(b.kind);
+            }
+            if (a.tsExchange != b.tsExchange) {
+                return a.tsExchange > b.tsExchange;
             }
             if (a.kind == HeapEntry::EntryKind::Stream) {
                 return a.streamIndex > b.streamIndex;
@@ -411,6 +421,9 @@ private:
         if (cfg_.requireMonotonicTsReceived && hasCurrentTime_ && ev.tsReceived < currentTsReceived_) {
             emitDiagnostic(key, DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR,
                            DiagnosticRecordSeverity::ERROR, 0, ev.tsReceived, ev.tsExchange);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: non-monotonic tsReceived.");
+            }
             return;
         }
         book->update(ev);
@@ -432,32 +445,38 @@ private:
         if (stream.exhausted || stream.hasBuffered) {
             return;
         }
-        NormalizedLobEvent ev{};
-        if (!stream.stream->nextNormalized(ev)) {
-            stream.exhausted = true;
-            return;
-        }
+        while (true) {
+            NormalizedLobEvent ev{};
+            if (!stream.stream->nextNormalized(ev)) {
+                stream.exhausted = true;
+                return;
+            }
 
-        if (cfg_.requireMonotonicTsReceived && stream.hasLastTs && ev.tsReceived < stream.lastTs) {
-            emitDiagnostic(stream.bookKey,
-                           DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR,
-                           DiagnosticRecordSeverity::ERROR, stream.seq, ev.tsReceived, ev.tsExchange);
-            return;
-        }
-        stream.hasLastTs = true;
-        stream.lastTs = ev.tsReceived;
+            if (cfg_.requireMonotonicTsReceived && stream.hasLastTs && ev.tsReceived < stream.lastTs) {
+                emitDiagnostic(stream.bookKey,
+                               DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR,
+                               DiagnosticRecordSeverity::ERROR, stream.seq, ev.tsReceived, ev.tsExchange);
+                if (cfg_.failFast) {
+                    throw std::runtime_error("MultiBookSimulator: non-monotonic stream tsReceived.");
+                }
+                continue; // skip bad event and try next
+            }
+            stream.hasLastTs = true;
+            stream.lastTs = ev.tsReceived;
 
-        stream.buffered = std::move(ev);
-        stream.hasBuffered = true;
-        ++stream.seq;
+            stream.buffered = std::move(ev);
+            stream.hasBuffered = true;
+            ++stream.seq;
+            break;
+        }
 
         heap_.push(
             HeapEntry{stream.buffered.tsReceived, stream.buffered.tsExchange, index, HeapEntry::EntryKind::Stream, 0});
     }
 
     Config cfg_{};
-    std::unordered_map<std::string, BookEntry> books_{};
     std::unordered_map<std::string, std::unique_ptr<BookScopedSink>> bookSinks_{};
+    std::unordered_map<std::string, BookEntry> books_{};
     IMultiLogSink* multiSink_{nullptr};
     std::vector<StreamState> streams_{};
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_{};

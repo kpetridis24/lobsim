@@ -230,7 +230,7 @@ TEST_CASE("apply rejects non-monotonic tsReceived and emits diagnostic") {
     REQUIRE(sim.step()); // establishes currentTsReceived_ == 10
 
     NormalizedLobEvent ev = makeEvent("FAIL", 1, 0, Side::BUY, UpdateType::ADD, 101, 1, 2);
-    sim.apply(id, ev); // should be rejected but not throw
+    REQUIRE_THROWS(sim.apply(id, ev)); // should be rejected and throw when failFast=true
 
     auto diags = sink.diagnostics();
     REQUIRE_FALSE(diags.empty());
@@ -554,7 +554,7 @@ TEST_CASE("Strategy event time travel emits diagnostic") {
 
     NormalizedLobEvent ev = makeEvent("TIME", 1, 3, Side::BUY, UpdateType::ADD, 101, 1, 2);
     sim.submitStrategyEvent(id, ev, 0); // allowed
-    ev.tsReceived = 1;                  // force time travel
+    ev.tsReceived = -5;                 // force time travel
     sim.submitStrategyEvent(id, ev, 0);
 
     auto diags = sink.diagnostics();
