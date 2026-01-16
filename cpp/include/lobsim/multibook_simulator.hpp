@@ -132,6 +132,40 @@ public:
 
     void apply(const BookId& id, NormalizedLobEvent ev) { applyToBook(bookKey(id), ev); }
 
+    void submitStrategyEvent(const BookId& id, NormalizedLobEvent ev, std::optional<std::int64_t> latency = {}) {
+        const std::string key = bookKey(id);
+        if (!hasBookKey(key)) {
+            emitDiagnostic(key, DiagnosticRecordCode::SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK,
+                           DiagnosticRecordSeverity::ERROR, 0, ev.tsReceived, ev.tsExchange);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: submitStrategyEvent for unknown book.");
+            }
+            return;
+        }
+        if (ev.symbolId.empty() || ev.symbolId != key) {
+            ev.symbolId = key;
+        }
+        ev.updateSource = UpdateSource::STRATEGY;
+        if (ev.tsReceived == 0) {
+            const std::int64_t base = hasCurrentTime_ ? currentTsReceived_ : 0;
+            ev.tsReceived = base + latency.value_or(1);
+        } else if (latency.has_value()) {
+            ev.tsReceived += latency.value();
+        }
+        if (cfg_.requireMonotonicTsReceived && hasCurrentTime_ && ev.tsReceived < currentTsReceived_) {
+            emitDiagnostic(key, DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL, DiagnosticRecordSeverity::ERROR, 0,
+                           ev.tsReceived, ev.tsExchange);
+            if (cfg_.failFast) {
+                throw std::runtime_error("MultiBookSimulator: strategy event time travel.");
+            }
+            return;
+        }
+        const std::size_t idx = strategyEvents_.size();
+        strategyEvents_.push_back(StrategyItem{std::move(ev), ++strategySeqCounter_});
+        const auto& ref = strategyEvents_.back();
+        heap_.push(HeapEntry{ref.ev.tsReceived, ref.ev.tsExchange, 0, HeapEntry::EntryKind::Strategy, idx});
+    }
+
     std::optional<std::int64_t> currentTime() const {
         if (!hasCurrentTime_) {
             return std::nullopt;
@@ -148,23 +182,37 @@ public:
         const auto entry = heap_.top();
         heap_.pop();
 
-        auto& stream = streams_[entry.streamIndex];
-        if (!stream.hasBuffered) {
-            emitDiagnostic(stream.bookKey, DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT,
-                           DiagnosticRecordSeverity::ERROR, stream.seq, currentTsReceived_, -1);
-            if (cfg_.failFast) {
-                throw std::runtime_error("MultiBookSimulator: heap entry without buffered event.");
+        if (entry.kind == HeapEntry::EntryKind::Strategy) {
+            if (entry.strategyIndex >= strategyEvents_.size()) {
+                emitDiagnostic("__multibook__", DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT,
+                               DiagnosticRecordSeverity::ERROR, 0, currentTsReceived_, -1);
+                if (cfg_.failFast) {
+                    throw std::runtime_error("MultiBookSimulator: invalid strategy heap entry.");
+                }
+                return false;
             }
-            return false;
+            NormalizedLobEvent ev = strategyEvents_[entry.strategyIndex].ev;
+            applyToBook(ev.symbolId, ev);
+            return true;
+        } else {
+            auto& stream = streams_[entry.streamIndex];
+            if (!stream.hasBuffered) {
+                emitDiagnostic(stream.bookKey, DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT,
+                               DiagnosticRecordSeverity::ERROR, stream.seq, currentTsReceived_, -1);
+                if (cfg_.failFast) {
+                    throw std::runtime_error("MultiBookSimulator: heap entry without buffered event.");
+                }
+                return false;
+            }
+
+            NormalizedLobEvent ev = std::move(stream.buffered);
+            stream.hasBuffered = false;
+
+            applyToBook(stream.bookKey, ev);
+            fillBuffer(entry.streamIndex);
+
+            return true;
         }
-
-        NormalizedLobEvent ev = std::move(stream.buffered);
-        stream.hasBuffered = false;
-
-        applyToBook(stream.bookKey, ev);
-        fillBuffer(entry.streamIndex);
-
-        return true;
     }
 
     std::size_t stepUntil(std::int64_t tsReceivedInclusive) {
@@ -317,6 +365,8 @@ private:
         std::int64_t tsReceived{0};
         std::int64_t tsExchange{0};
         std::size_t streamIndex{0};
+        enum class EntryKind : std::uint8_t { Stream = 0, Strategy = 1 } kind{EntryKind::Stream};
+        std::size_t strategyIndex{0};
     };
 
     struct HeapCompare {
@@ -327,7 +377,13 @@ private:
             if (a.tsExchange != b.tsExchange) {
                 return a.tsExchange > b.tsExchange;
             }
-            return a.streamIndex > b.streamIndex;
+            if (a.kind != b.kind) {
+                return static_cast<int>(a.kind) > static_cast<int>(b.kind);
+            }
+            if (a.kind == HeapEntry::EntryKind::Stream) {
+                return a.streamIndex > b.streamIndex;
+            }
+            return a.strategyIndex > b.strategyIndex;
         }
     };
 
@@ -395,7 +451,8 @@ private:
         stream.hasBuffered = true;
         ++stream.seq;
 
-        heap_.push(HeapEntry{stream.buffered.tsReceived, stream.buffered.tsExchange, index});
+        heap_.push(
+            HeapEntry{stream.buffered.tsReceived, stream.buffered.tsExchange, index, HeapEntry::EntryKind::Stream, 0});
     }
 
     Config cfg_{};
@@ -404,6 +461,12 @@ private:
     IMultiLogSink* multiSink_{nullptr};
     std::vector<StreamState> streams_{};
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_{};
+    struct StrategyItem {
+        NormalizedLobEvent ev{};
+        std::uint64_t insertionSeq{0};
+    };
+    std::vector<StrategyItem> strategyEvents_{};
+    std::uint64_t strategySeqCounter_{0};
     bool hasCurrentTime_{false};
     std::int64_t currentTsReceived_{0};
 

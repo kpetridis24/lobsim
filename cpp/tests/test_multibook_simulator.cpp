@@ -498,6 +498,71 @@ TEST_CASE("addBook returns false on duplicate book key") {
     REQUIRE_FALSE(sim.addBook(BookId{"X", "DUP"}));
 }
 
+TEST_CASE("Strategy events merge with feeds honoring latency and ordering") {
+    MultiBookSimulator sim;
+    InMemoryMultiLogSink sink;
+    sim.setMultiLogSink(&sink);
+
+    BookId id{"X", "STRAT"};
+    NormalizedVectorSource src({makeEvent("STRAT", 1, 5, Side::SELL, UpdateType::ADD, 100, 5, 1)});
+    sim.addStream(id, src);
+
+    NormalizedLobEvent strat1 = makeEvent("STRAT", 1, 6, Side::BUY, UpdateType::ADD, 100, 2, 10);
+    NormalizedLobEvent strat2 = makeEvent("STRAT", 1, 7, Side::BUY, UpdateType::ADD, 100, 3, 11);
+    sim.submitStrategyEvent(id, strat1);
+    sim.submitStrategyEvent(id, strat2);
+
+    std::vector<std::string> order;
+    while (sim.step()) {
+        auto evs = sink.events();
+        order.push_back(evs.back().bookKey + ":" + std::to_string(evs.back().orderId));
+    }
+    REQUIRE(order.size() == 3);
+    REQUIRE(order[0] == "X:STRAT:1");
+    REQUIRE(order[1] == "X:STRAT:10");
+    REQUIRE(order[2] == "X:STRAT:11");
+}
+
+TEST_CASE("Strategy event into unknown book emits diagnostic and optional throw") {
+    {
+        MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = false});
+        InMemoryMultiLogSink sink;
+        sim.setMultiLogSink(&sink);
+        NormalizedLobEvent ev = makeEvent("MISSING", 1, 1, Side::BUY, UpdateType::ADD, 100, 1, 1);
+        sim.submitStrategyEvent(BookId{"X", "MISSING"}, ev);
+        auto diags = sink.diagnostics();
+        REQUIRE(diags.size() == 1);
+        REQUIRE(diags[0].code == DiagnosticRecordCode::SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK);
+    }
+    {
+        MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = true});
+        InMemoryMultiLogSink sink;
+        sim.setMultiLogSink(&sink);
+        NormalizedLobEvent ev = makeEvent("MISSING", 1, 1, Side::BUY, UpdateType::ADD, 100, 1, 1);
+        REQUIRE_THROWS(sim.submitStrategyEvent(BookId{"X", "MISSING"}, ev));
+    }
+}
+
+TEST_CASE("Strategy event time travel emits diagnostic") {
+    MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = false});
+    InMemoryMultiLogSink sink;
+    sim.setMultiLogSink(&sink);
+    BookId id{"X", "TIME"};
+    NormalizedVectorSource src({makeEvent("TIME", 1, 5, Side::SELL, UpdateType::ADD, 100, 1, 1)});
+    sim.addStream(id, src);
+    REQUIRE(sim.step());
+
+    NormalizedLobEvent ev = makeEvent("TIME", 1, 3, Side::BUY, UpdateType::ADD, 101, 1, 2);
+    sim.submitStrategyEvent(id, ev, 0); // allowed
+    ev.tsReceived = 1;                  // force time travel
+    sim.submitStrategyEvent(id, ev, 0);
+
+    auto diags = sink.diagnostics();
+    REQUIRE_FALSE(diags.empty());
+    REQUIRE(diags.back().code == DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL);
+    REQUIRE(diags.back().bookKey == "X:TIME");
+}
+
 TEST_CASE("Duplicate stream registration emits diagnostic and is rejected") {
     MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = false});
     InMemoryMultiLogSink sink;
