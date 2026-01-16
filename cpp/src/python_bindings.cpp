@@ -8,9 +8,9 @@
 #include "lobsim/replay_session.hpp"
 #include "lobsim/types.hpp"
 
+#include <optional>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -315,47 +315,58 @@ PYBIND11_MODULE(_core, m) {
 
     py::class_<PyMultiBookWrapper>(multibook, "MultiBookSimulator")
         .def(py::init<const MultiBookSimulator::Config&>(), py::arg("config") = MultiBookSimulator::Config{})
-        .def("add_book", [](PyMultiBookWrapper& w, const BookId& id) { return w.sim.addBook(id); }, py::arg("book_id"))
-        .def("has_book", [](const PyMultiBookWrapper& w, const BookId& id) { return w.sim.hasBook(id); },
-             py::arg("book_id"))
+        .def(
+            "add_book", [](PyMultiBookWrapper& w, const BookId& id) { return w.sim.addBook(id); }, py::arg("book_id"))
+        .def(
+            "has_book", [](const PyMultiBookWrapper& w, const BookId& id) { return w.sim.hasBook(id); },
+            py::arg("book_id"))
         .def(
             "set_log_sink",
             [](PyMultiBookWrapper& w, const BookId& id, InMemoryLogSink& sink) { w.sim.setLogSink(id, &sink); },
             py::arg("book_id"), py::arg("sink"), py::keep_alive<1, 3>())
-        .def("set_multi_log_sink",
-             [](PyMultiBookWrapper& w, InMemoryMultiLogSink& sink) { w.sim.setMultiLogSink(&sink); },
-             py::arg("sink"), py::keep_alive<1, 2>())
-        .def("add_normalized_stream",
-             [](PyMultiBookWrapper& w, const BookId& id, std::vector<NormalizedLobEvent> events) {
-                 auto src = std::make_shared<PyNormalizedVectorSource>(std::move(events));
-                 w.sim.addStream(id, *src);
-                 w.heldSources.push_back(std::move(src));
-             },
-             py::arg("book_id"), py::arg("events"))
-        .def("apply", [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev) { w.sim.apply(id, ev); },
-             py::arg("book_id"), py::arg("event"))
-        .def("submit_strategy_event",
-             [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev,
-                std::optional<std::int64_t> latency) { w.sim.submitStrategyEvent(id, ev, latency); },
-             py::arg("book_id"), py::arg("event"), py::arg("latency") = std::nullopt)
+        .def(
+            "set_multi_log_sink",
+            [](PyMultiBookWrapper& w, InMemoryMultiLogSink& sink) { w.sim.setMultiLogSink(&sink); }, py::arg("sink"),
+            py::keep_alive<1, 2>())
+        .def(
+            "add_normalized_stream",
+            [](PyMultiBookWrapper& w, const BookId& id, std::vector<NormalizedLobEvent> events) {
+                auto src = std::make_shared<PyNormalizedVectorSource>(std::move(events));
+                w.sim.addStream(id, *src);
+                w.heldSources.push_back(std::move(src));
+            },
+            py::arg("book_id"), py::arg("events"))
+        .def(
+            "apply", [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev) { w.sim.apply(id, ev); },
+            py::arg("book_id"), py::arg("event"))
+        .def(
+            "submit_strategy_event",
+            [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev,
+               std::optional<std::int64_t> latency) { w.sim.submitStrategyEvent(id, ev, latency); },
+            py::arg("book_id"), py::arg("event"), py::arg("latency") = std::nullopt)
         .def("step", [](PyMultiBookWrapper& w) { return w.sim.step(); })
-        .def("step_until", [](PyMultiBookWrapper& w, std::int64_t ts) { return w.sim.stepUntil(ts); }, py::arg("ts"))
-        .def("step_for", [](PyMultiBookWrapper& w, std::int64_t delta) { return w.sim.stepFor(delta); },
-             py::arg("delta_ts"))
+        .def(
+            "step_until", [](PyMultiBookWrapper& w, std::int64_t ts) { return w.sim.stepUntil(ts); }, py::arg("ts"))
+        .def(
+            "step_for", [](PyMultiBookWrapper& w, std::int64_t delta) { return w.sim.stepFor(delta); },
+            py::arg("delta_ts"))
         .def("current_time", [](const PyMultiBookWrapper& w) { return w.sim.currentTime(); })
-        .def("get_best_price_ticks",
-             [](const PyMultiBookWrapper& w, const BookId& id, Side side) { return w.sim.getBestPriceTicks(id, side); },
-             py::arg("book_id"), py::arg("side"))
-        .def("l2_top_n",
-             [](const PyMultiBookWrapper& w, const BookId& id, Side side, std::uint32_t n) {
-                 return w.sim.l2TopN(id, side, n);
-             },
-             py::arg("book_id"), py::arg("side"), py::arg("n"))
-        .def("depth_at",
-             [](const PyMultiBookWrapper& w, const BookId& id, Side side, std::int64_t price) {
-                 return w.sim.depthAt(id, side, price);
-             },
-             py::arg("book_id"), py::arg("side"), py::arg("price_ticks"));
+        .def(
+            "get_best_price_ticks",
+            [](const PyMultiBookWrapper& w, const BookId& id, Side side) { return w.sim.getBestPriceTicks(id, side); },
+            py::arg("book_id"), py::arg("side"))
+        .def(
+            "l2_top_n",
+            [](const PyMultiBookWrapper& w, const BookId& id, Side side, std::uint32_t n) {
+                return w.sim.l2TopN(id, side, n);
+            },
+            py::arg("book_id"), py::arg("side"), py::arg("n"))
+        .def(
+            "depth_at",
+            [](const PyMultiBookWrapper& w, const BookId& id, Side side, std::int64_t price) {
+                return w.sim.depthAt(id, side, price);
+            },
+            py::arg("book_id"), py::arg("side"), py::arg("price_ticks"));
 }
 
 #else

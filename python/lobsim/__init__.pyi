@@ -1,5 +1,6 @@
 from . import types, replay, sink, engine, lob_event, _core
 from ._core import BookId
+
 # multibook is a pybind submodule on _core
 multibook = _core.multibook
 

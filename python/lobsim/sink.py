@@ -19,6 +19,7 @@ class InMemoryLogSink(_InMemoryLogSink):
 
 InMemoryLogSink.__signature__ = Signature()
 
+
 class InMemoryMultiLogSink(_InMemoryMultiLogSink):
     def __init__(self) -> None:
         super().__init__()
