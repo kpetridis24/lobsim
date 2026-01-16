@@ -51,9 +51,23 @@ def parse_time_us(v) -> int:
         return v
     if isinstance(v, str):
         v = v.strip()
-        if "." in v:
+        if ":" in v:
+            hh, mm, rest = v.split(":")
+            if "." in rest:
+                ss, frac = rest.split(".")
+            else:
+                ss, frac = rest, "0"
+            frac = (frac + "000000")[:6]
+            return (
+                int(hh) * 3600_000_000
+                + int(mm) * 60_000_000
+                + int(ss) * 1_000_000
+                + int(frac)
+            )
+        try:
+            return int(v)
+        except ValueError:
             return int(float(v))
-        return int(v)
     if isinstance(v, float):
         return int(v)
     raise ValueError(f"unsupported time value: {type(v)}")
