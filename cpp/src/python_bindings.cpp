@@ -175,7 +175,8 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("takerSide", &FillRecord::takerSide)
         .def_readonly("takerOrderId", &FillRecord::takerOrderId)
         .def_readonly("takerTraderId", &FillRecord::takerTraderId)
-        .def_readonly("takerSource", &FillRecord::takerSource);
+        .def_readonly("takerSource", &FillRecord::takerSource)
+        .def_readonly("bookKey", &FillRecord::bookKey);
 
     py::class_<EventApplyRecord>(m, "EventApplyRecord")
         .def_readonly("seq", &EventApplyRecord::seq)
@@ -188,7 +189,8 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("qtyLots", &EventApplyRecord::qtyLots)
         .def_readonly("orderId", &EventApplyRecord::orderId)
         .def_readonly("traderId", &EventApplyRecord::traderId)
-        .def_readonly("aggressorId", &EventApplyRecord::aggressorId);
+        .def_readonly("aggressorId", &EventApplyRecord::aggressorId)
+        .def_readonly("bookKey", &EventApplyRecord::bookKey);
 
     py::class_<InMemoryLogSink>(m, "InMemoryLogSink")
         .def(py::init<>())

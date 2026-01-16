@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <string>
 
 struct FillRecord {
 public:
@@ -22,6 +23,7 @@ public:
     std::int64_t takerOrderId;
     std::int64_t takerTraderId;
     UpdateSource takerSource;
+    std::string bookKey;
 };
 
 struct EventApplyRecord {
@@ -38,6 +40,7 @@ struct EventApplyRecord {
     std::int64_t orderId;
     std::int64_t traderId;
     std::int64_t aggressorId;
+    std::string bookKey;
 };
 
 enum class DiagnosticRecordCode : std::uint8_t {
@@ -71,6 +74,7 @@ struct DiagnosticRecord {
     std::int64_t tsReceived;
     DiagnosticRecordCode code;
     DiagnosticRecordSeverity severity;
+    std::string bookKey;
 };
 
 class ILogSink {

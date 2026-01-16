@@ -21,9 +21,18 @@
 
 void PaperTradingSimulator::update(const NormalizedLobEvent& event) {
     if (sink) {
-        sink->onEventApply(EventApplyRecord{seq, event.tsExchange, event.tsReceived, event.side, event.updateType,
-                                            event.updateSource, event.priceTicks, event.quantityLots, event.orderId,
-                                            event.traderId, event.aggressorId});
+        sink->onEventApply(EventApplyRecord{seq,
+                                            event.tsExchange,
+                                            event.tsReceived,
+                                            event.side,
+                                            event.updateType,
+                                            event.updateSource,
+                                            event.priceTicks,
+                                            event.quantityLots,
+                                            event.orderId,
+                                            event.traderId,
+                                            event.aggressorId,
+                                            event.symbolId});
     }
     switch (event.updateType) {
     case UpdateType::ADD:
@@ -135,9 +144,20 @@ void PaperTradingSimulator::onAdd(const NormalizedLobEvent& event) {
                     const std::int64_t take = std::min<std::int64_t>(makerQty, remaining);
                     if (sink) {
                         auto makerSide = event.side == Side::BUY ? Side::SELL : Side::BUY;
-                        sink->onFill(FillRecord{seq, event.tsExchange, event.tsReceived, bestPx, take, makerSide,
-                                                makerOrderId, makerTraderId, makerSource, event.side, event.orderId,
-                                                event.traderId, event.updateSource});
+                        sink->onFill(FillRecord{seq,
+                                                event.tsExchange,
+                                                event.tsReceived,
+                                                bestPx,
+                                                take,
+                                                makerSide,
+                                                makerOrderId,
+                                                makerTraderId,
+                                                makerSource,
+                                                event.side,
+                                                event.orderId,
+                                                event.traderId,
+                                                event.updateSource,
+                                                event.symbolId});
                     }
                     remaining -= take;
                 }
@@ -170,9 +190,20 @@ void PaperTradingSimulator::onAdd(const NormalizedLobEvent& event) {
 
                     if (sink) {
                         auto makerSide = event.side == Side::BUY ? Side::SELL : Side::BUY;
-                        sink->onFill(FillRecord{seq, event.tsExchange, event.tsReceived, bestPx, take, makerSide,
-                                                makerOrderId, makerTraderId, makerSource, event.side, event.orderId,
-                                                event.traderId, event.updateSource});
+                        sink->onFill(FillRecord{seq,
+                                                event.tsExchange,
+                                                event.tsReceived,
+                                                bestPx,
+                                                take,
+                                                makerSide,
+                                                makerOrderId,
+                                                makerTraderId,
+                                                makerSource,
+                                                event.side,
+                                                event.orderId,
+                                                event.traderId,
+                                                event.updateSource,
+                                                event.symbolId});
                     }
 
                     marketDeltas.emplace_back(std::get<4>(node), -take);
@@ -362,9 +393,20 @@ void PaperTradingSimulator::applyPaperTradeAtLevel(Side passiveSide, std::int64_
             auto takerTraderId = eventIsAggressor ? aggressor.traderId : UnknownTraderIdSentinel;
             auto takerSource = aggressor.updateSource;
 
-            sink->onFill(FillRecord{seq, aggressor.tsExchange, aggressor.tsReceived, priceTicks, fillQty, passiveSide,
-                                    orderId, order.originalEvent.traderId, UpdateSource::STRATEGY, takerSide,
-                                    takerOrderId, takerTraderId, takerSource});
+            sink->onFill(FillRecord{seq,
+                                    aggressor.tsExchange,
+                                    aggressor.tsReceived,
+                                    priceTicks,
+                                    fillQty,
+                                    passiveSide,
+                                    orderId,
+                                    order.originalEvent.traderId,
+                                    UpdateSource::STRATEGY,
+                                    takerSide,
+                                    takerOrderId,
+                                    takerTraderId,
+                                    takerSource,
+                                    aggressor.symbolId});
         }
 
         tradeLots -= fillQty;
@@ -772,9 +814,20 @@ void PaperTradingSimulator::onPartialOrderCancel(const NormalizedLobEvent& event
         auto takerSide = storedSide == Side::BUY ? Side::SELL : Side::BUY;
         auto makerSource = std::get<3>(queueElement);
         auto storedTraderId = std::get<1>(queueElement);
-        sink->onFill(FillRecord{seq, event.tsExchange, event.tsReceived, storedPriceTicks, take, storedSide,
-                                event.orderId, storedTraderId, makerSource, takerSide, UnknownOrderIdSentinel,
-                                UnknownTraderIdSentinel, event.updateSource});
+        sink->onFill(FillRecord{seq,
+                                event.tsExchange,
+                                event.tsReceived,
+                                storedPriceTicks,
+                                take,
+                                storedSide,
+                                event.orderId,
+                                storedTraderId,
+                                makerSource,
+                                takerSide,
+                                UnknownOrderIdSentinel,
+                                UnknownTraderIdSentinel,
+                                event.updateSource,
+                                event.symbolId});
     }
 
     if (liquidity == 0) {
@@ -973,5 +1026,5 @@ void PaperTradingSimulator::emitDiagnostic(const NormalizedLobEvent& event, Diag
     if (sink == nullptr) {
         return;
     }
-    sink->onDiagnostic(DiagnosticRecord{seq, event.tsExchange, event.tsReceived, code, severity});
+    sink->onDiagnostic(DiagnosticRecord{seq, event.tsExchange, event.tsReceived, code, severity, event.symbolId});
 }

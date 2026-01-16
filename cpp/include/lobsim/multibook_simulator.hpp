@@ -1,7 +1,10 @@
 #pragma once
 
+#include "lobsim/book_id.hpp"
 #include "lobsim/event_adapter.hpp"
 #include "lobsim/event_source.hpp"
+#include "lobsim/log_sink.hpp"
+#include "lobsim/multi_log_sink.hpp"
 #include "lobsim/paper_trading_simulator.hpp"
 
 #include <cstdint>
@@ -14,13 +17,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-struct BookId {
-    std::string venue;
-    std::string symbol;
-
-    bool operator==(const BookId& other) const = default;
-};
 
 class MultiBookSimulator {
 public:
@@ -43,6 +39,7 @@ public:
         entry.id = id;
         entry.key = key;
         entry.engine = std::move(engine);
+        attachBookSink(entry);
         books_.emplace(key, std::move(entry));
         return true;
     }
@@ -75,6 +72,16 @@ public:
             throw std::runtime_error("MultiBookSimulator: unknown book in setLogSink.");
         }
         book->setLogSink(sink);
+        bookSinks_.erase(bookKey(id));
+    }
+
+    // Attach a multi-book sink; every book will get a BookScopedSink wrapper that tags events with bookId.
+    void setMultiLogSink(IMultiLogSink* sink) {
+        multiSink_ = sink;
+        bookSinks_.clear();
+        for (auto& [key, entry] : books_) {
+            attachBookSink(entry);
+        }
     }
 
     std::optional<std::int64_t> depthAt(const BookId& id, Side side, std::int64_t priceTicks) const {
@@ -254,12 +261,7 @@ private:
         }
     };
 
-    static std::string bookKey(const BookId& id) {
-        if (id.venue.empty()) {
-            return id.symbol;
-        }
-        return id.venue + ":" + id.symbol;
-    }
+    static std::string bookKey(const BookId& id) { return ::bookKey(id); }
 
     void applyToBook(const std::string& key, NormalizedLobEvent& ev) {
         auto* book = getBookKey(key);
@@ -312,8 +314,19 @@ private:
 
     Config cfg_{};
     std::unordered_map<std::string, BookEntry> books_{};
+    std::unordered_map<std::string, std::unique_ptr<BookScopedSink>> bookSinks_{};
+    IMultiLogSink* multiSink_{nullptr};
     std::vector<StreamState> streams_{};
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_{};
     bool hasCurrentTime_{false};
     std::int64_t currentTsReceived_{0};
+
+    void attachBookSink(BookEntry& entry) {
+        if (!multiSink_) {
+            return;
+        }
+        auto wrapped = std::make_unique<BookScopedSink>(entry.key, multiSink_);
+        entry.engine->setLogSink(wrapped.get());
+        bookSinks_[entry.key] = std::move(wrapped);
+    }
 };
