@@ -101,17 +101,6 @@ public:
         return book->getBestPriceTicks(side);
     }
 
-    void apply(NormalizedLobEvent ev) {
-        if (ev.symbolId.empty()) {
-            throw std::runtime_error("MultiBookSimulator: event.symbolId is empty.");
-        }
-        auto* book = getBookKey(ev.symbolId);
-        if (!book) {
-            throw std::runtime_error("MultiBookSimulator: unknown book for event.symbolId.");
-        }
-        applyToBook(ev.symbolId, ev);
-    }
-
     void apply(const BookId& id, NormalizedLobEvent ev) { applyToBook(bookKey(id), ev); }
 
     std::optional<std::int64_t> currentTime() const {
