@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <string>
 
 struct FillRecord {
 public:
@@ -22,6 +23,7 @@ public:
     std::int64_t takerOrderId;
     std::int64_t takerTraderId;
     UpdateSource takerSource;
+    std::string bookKey;
 };
 
 struct EventApplyRecord {
@@ -38,6 +40,7 @@ struct EventApplyRecord {
     std::int64_t orderId;
     std::int64_t traderId;
     std::int64_t aggressorId;
+    std::string bookKey;
 };
 
 enum class DiagnosticRecordCode : std::uint8_t {
@@ -61,6 +64,16 @@ enum class DiagnosticRecordCode : std::uint8_t {
     REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY = 17,
     CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK = 18,
     REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY = 19,
+    SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR = 20,
+    DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR = 21,
+    L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR = 22,
+    GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR = 23,
+    HEAP_ENTRY_WITHOUT_BUFFERED_EVENT = 24,
+    APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK = 25,
+    NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR = 26,
+    DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR = 27,
+    SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK = 28,
+    STRATEGY_EVENT_TIME_TRAVEL = 29,
 };
 
 enum class DiagnosticRecordSeverity : std::uint8_t { INFO = 0, WARNING = 1, ERROR = 2 };
@@ -71,6 +84,7 @@ struct DiagnosticRecord {
     std::int64_t tsReceived;
     DiagnosticRecordCode code;
     DiagnosticRecordSeverity severity;
+    std::string bookKey;
 };
 
 class ILogSink {

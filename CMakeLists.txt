@@ -110,6 +110,7 @@ if(LOBSIM_BUILD_TESTS)
   add_executable(lobsim_core_tests
     cpp/tests/test_paper_trading_simulator.cpp
     cpp/tests/test_in_memory_sink.cpp
+    cpp/tests/test_multibook_simulator.cpp
   )
   target_link_libraries(lobsim_core_tests PRIVATE lobsim::core Catch2::Catch2WithMain)
 
@@ -154,6 +155,9 @@ endif()
 # ---- Examples ----
 add_executable(lobsim_cpp_example examples/lobsim_cpp.cpp)
 target_link_libraries(lobsim_cpp_example PRIVATE lobsim::core lobsim::parquet)
+
+add_executable(lobsim_multibook_example examples/lobsim_multibook_cpp.cpp)
+target_link_libraries(lobsim_multibook_example PRIVATE lobsim::core lobsim::parquet)
 
 add_executable(lobsim_lobster_example examples/lobsim_lobster_cpp.cpp)
 target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
