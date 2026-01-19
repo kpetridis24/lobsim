@@ -152,7 +152,8 @@ PYBIND11_MODULE(_core, m) {
         .value("DELETE", UpdateType::DELETE)
         .value("SUBTRACT", UpdateType::SUBTRACT)
         .value("MATCH", UpdateType::MATCH)
-        .value("SET", UpdateType::SET);
+        .value("SET", UpdateType::SET)
+        .value("AGGRESSIVE_TRADE", UpdateType::AGGRESSIVE_TRADE);
 
     py::enum_<UpdateSource>(types, "UpdateSource")
         .value("HISTORICAL", UpdateSource::HISTORICAL)

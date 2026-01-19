@@ -29,6 +29,9 @@ void PaperTradingSimulator::update(const NormalizedLobEvent& event) {
     case UpdateType::ADD:
         onAdd(event);
         break;
+    case UpdateType::AGGRESSIVE_TRADE:
+        onAggressiveTrade(event);
+        break;
 
     case UpdateType::DELETE:
         onDelete(event);
@@ -266,6 +269,99 @@ void PaperTradingSimulator::onAdd(const NormalizedLobEvent& event) {
             }
         }
     }
+}
+
+void PaperTradingSimulator::onAggressiveTrade(const NormalizedLobEvent& event) {
+    if (event.updateSource != UpdateSource::STRATEGY) {
+        emitDiagnostic(event, DiagnosticRecordCode::INVALID_UPDATE_TYPE, DiagnosticRecordSeverity::ERROR);
+        return;
+    }
+    if (event.quantityLots <= 0) {
+        emitDiagnostic(event, DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY,
+                       DiagnosticRecordSeverity::ERROR);
+        return;
+    }
+
+    const bool isBid = event.side == Side::BUY;
+    auto& oppBook = isBid ? asks : bids;
+    auto oppHeapCopy = isBid ? asksHeap : bidsHeap;
+    const bool oppIsAsk = isBid;
+
+    std::int64_t remaining = event.quantityLots;
+
+    auto bestOpp = [&]() -> std::optional<std::int64_t> {
+        while (!oppHeapCopy.empty()) {
+            const std::int64_t px = oppIsAsk ? -oppHeapCopy.top() : oppHeapCopy.top();
+            auto it = oppBook.find(px);
+            if (it != oppBook.end() && !it->second.empty()) {
+                return px;
+            }
+            oppHeapCopy.pop();
+        }
+        return std::nullopt;
+    };
+
+    // Consume historical book without mutating it
+    while (remaining > 0) {
+        auto bestPxOpt = bestOpp();
+        if (!bestPxOpt) {
+            break;
+        }
+        const auto bestPx = *bestPxOpt;
+        auto itLevel = oppBook.find(bestPx);
+        if (itLevel == oppBook.end() || itLevel->second.empty()) {
+            continue;
+        }
+        const auto& levelList = itLevel->second;
+        for (const auto& node : levelList) {
+            if (remaining <= 0) {
+                break;
+            }
+            const auto makerOrderId = std::get<0>(node);
+            const auto makerTraderId = std::get<1>(node);
+            const auto makerQty = std::get<2>(node);
+            const auto makerSource = std::get<3>(node);
+            if (makerQty <= 0) {
+                continue;
+            }
+            const std::int64_t take = std::min<std::int64_t>(makerQty, remaining);
+            if (sink) {
+                auto makerSide = event.side == Side::BUY ? Side::SELL : Side::BUY;
+                sink->onFill(FillRecord{seq, event.tsExchange, event.tsReceived, bestPx, take, makerSide, makerOrderId,
+                                        makerTraderId, makerSource, event.side, event.orderId, event.traderId,
+                                        event.updateSource, event.symbolId});
+            }
+            remaining -= take;
+        }
+
+        // pop duplicates of this price from the heap copy to progress
+        while (!oppHeapCopy.empty()) {
+            const auto pxTop = oppIsAsk ? -oppHeapCopy.top() : oppHeapCopy.top();
+            if (pxTop != bestPx) {
+                break;
+            }
+            oppHeapCopy.pop();
+        }
+    }
+
+    // Consume resting paper orders on the opposite side
+    if (remaining > 0) {
+        auto bestPaperOpp = [&]() { return bestPaperOppositePrice(oppIsAsk); };
+        while (remaining > 0) {
+            auto paperPx = bestPaperOpp();
+            if (!paperPx) {
+                break;
+            }
+            const auto traded =
+                tradeAgainstPaperLevel(oppIsAsk ? Side::SELL : Side::BUY, *paperPx, remaining, event);
+            if (traded <= 0) {
+                break;
+            }
+            remaining -= traded;
+        }
+    }
+
+    ++seq;
 }
 
 std::optional<std::int64_t> PaperTradingSimulator::bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,

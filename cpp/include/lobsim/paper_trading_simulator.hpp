@@ -97,6 +97,7 @@ private:
     };
 
     void onAdd(const NormalizedLobEvent& event);
+    void onAggressiveTrade(const NormalizedLobEvent& event);
     void onSubtract(const NormalizedLobEvent& event);
     void onDelete(const NormalizedLobEvent& event);
     void onMatch(const NormalizedLobEvent& event);

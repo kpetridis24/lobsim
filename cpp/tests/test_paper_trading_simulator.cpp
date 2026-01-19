@@ -585,6 +585,37 @@ TEST_CASE("Resting strategy order fills when future historical orders cross its 
     CHECK(it->second.state.remainingQty == 0);
 }
 
+TEST_CASE("Strategy aggressive trade sweeps historical book without resting") {
+    PaperTradingSimulator sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    // asks: 3@100 (id 1001), 4@101 (id 1002)
+    seed_l3(sim, {Side::SELL, Side::SELL}, {100, 101}, {3, 4}, {1001, 1002}, {501, 502});
+
+    // Strategy AGGRESSIVE_TRADE BUY qty=5 (no price specified)
+    auto ev = make_event(1, 2, Side::BUY, UpdateType::AGGRESSIVE_TRADE, 0, 5, 9001, 900, NoAggressorNeededSentinel,
+                         UpdateSource::STRATEGY);
+    sim.update(ev);
+
+    const auto& fills = sink.getFills();
+    REQUIRE(fills.size() == 2);
+    CHECK(sum_fill_qty(fills) == 5);
+
+    // Should fill 3 @100 then 2 @101; book not mutated
+    CHECK(fills[0].priceTicks == 100);
+    CHECK(fills[0].qtyLots == 3);
+    CHECK(fills[1].priceTicks == 101);
+    CHECK(fills[1].qtyLots == 2);
+
+    auto d100 = sim.depthAt(Side::SELL, 100);
+    REQUIRE(d100.has_value());
+    CHECK(d100.value() == 3);
+    auto d101 = sim.depthAt(Side::SELL, 101);
+    REQUIRE(d101.has_value());
+    CHECK(d101.value() == 4);
+}
+
 TEST_CASE("Canceling a market order behind paper does not advance paper") {
     PaperTradingSimulator sim{};
     InMemoryLogSink sink;

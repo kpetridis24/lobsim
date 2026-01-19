@@ -301,6 +301,8 @@ private:
         }
         case UpdateType::MATCH:
             return;
+        case UpdateType::AGGRESSIVE_TRADE:
+            return;
         }
     }
 

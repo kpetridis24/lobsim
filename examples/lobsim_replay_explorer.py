@@ -820,10 +820,16 @@ def main() -> None:
                     UpdateType.SUBTRACT,
                     UpdateType.MATCH,
                     UpdateType.SET,
+                    UpdateType.AGGRESSIVE_TRADE,
                 ],
             )
             side = st.selectbox("Side", [Side.BUY, Side.SELL])
-            price_ticks = st.number_input("Price ticks", value=0, step=1)
+            price_ticks = st.number_input(
+                "Price ticks (ignored for AGGRESSIVE_TRADE)",
+                value=0,
+                step=1,
+                disabled=update_type == UpdateType.AGGRESSIVE_TRADE,
+            )
             qty_lots = st.number_input("Quantity lots", value=1, step=1)
             order_id = st.number_input("Order ID", value=123456, step=1)
             latency = st.number_input("Latency (us)", value=1, step=1)

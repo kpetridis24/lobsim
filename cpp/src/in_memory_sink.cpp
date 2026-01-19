@@ -188,5 +188,7 @@ void InMemoryLogSink::updateStrategyOrder(const EventApplyRecord& r) {
     }
     case UpdateType::MATCH:
         return;
+    case UpdateType::AGGRESSIVE_TRADE:
+        return;
     }
 }
