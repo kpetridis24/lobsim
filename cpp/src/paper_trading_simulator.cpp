@@ -352,8 +352,7 @@ void PaperTradingSimulator::onAggressiveTrade(const NormalizedLobEvent& event) {
             if (!paperPx) {
                 break;
             }
-            const auto traded =
-                tradeAgainstPaperLevel(oppIsAsk ? Side::SELL : Side::BUY, *paperPx, remaining, event);
+            const auto traded = tradeAgainstPaperLevel(oppIsAsk ? Side::SELL : Side::BUY, *paperPx, remaining, event);
             if (traded <= 0) {
                 break;
             }
