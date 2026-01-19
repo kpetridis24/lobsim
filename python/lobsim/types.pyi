@@ -12,6 +12,7 @@ class UpdateType(Enum):
     SUBTRACT = 2
     MATCH = 3
     SET = 4
+    AGGRESSIVE_TRADE = 5
 
 class UpdateSource(Enum):
     HISTORICAL = 0
