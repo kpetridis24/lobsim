@@ -13,6 +13,7 @@
 #include <pybind11/stl.h>
 #include <span>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // CHANGE THIS include to your actual sink header
@@ -39,6 +40,90 @@ private:
     std::size_t index_{0};
 };
 
+struct PyIteratorSource {
+    explicit PyIteratorSource(py::object source) : source_(std::move(source)) {}
+
+    bool nextObject(py::object& out) {
+        py::gil_scoped_acquire gil;
+        if (!iter_ && py::hasattr(source_, "__iter__")) {
+            iter_ = py::iter(source_);
+        }
+
+        if (iter_) {
+            py::object item = py::reinterpret_steal<py::object>(PyIter_Next(iter_.ptr()));
+            if (!item) {
+                if (PyErr_Occurred()) {
+                    throw py::error_already_set();
+                }
+                return false;
+            }
+            out = std::move(item);
+            return true;
+        }
+
+        if (py::hasattr(source_, "next")) {
+            py::object item = source_.attr("next")();
+            if (item.is_none()) {
+                return false;
+            }
+            out = std::move(item);
+            return true;
+        }
+
+        throw std::runtime_error("Python source must be iterable or implement next().");
+    }
+
+private:
+    py::object source_;
+    py::object iter_;
+};
+
+struct PyNormalizedStreamSource {
+    explicit PyNormalizedStreamSource(py::object source) : source_(std::move(source)) {}
+
+    bool next(NormalizedLobEvent& out) {
+        py::object item;
+        if (!source_.nextObject(item)) {
+            return false;
+        }
+        out = item.cast<NormalizedLobEvent>();
+        return true;
+    }
+
+private:
+    PyIteratorSource source_;
+};
+
+struct PyRawStreamSource {
+    explicit PyRawStreamSource(py::object source) : source_(std::move(source)) {}
+
+    bool next(py::object& out) { return source_.nextObject(out); }
+
+private:
+    PyIteratorSource source_;
+};
+
+struct PyAdapter {
+    explicit PyAdapter(py::object adapter) : adapter_(std::move(adapter)) {}
+
+    NormalizedLobEvent normalize(const py::object& raw) const {
+        py::gil_scoped_acquire gil;
+        try {
+            if (py::hasattr(adapter_, "normalize")) {
+                return adapter_.attr("normalize")(raw).cast<NormalizedLobEvent>();
+            }
+            return adapter_(raw).cast<NormalizedLobEvent>();
+        } catch (py::error_already_set& e) {
+            const std::string msg = e.what();
+            PyErr_Clear();
+            throw std::runtime_error(msg);
+        }
+    }
+
+private:
+    py::object adapter_;
+};
+
 struct PyMultiBookWrapper {
     explicit PyMultiBookWrapper(const MultiBookSimulator::Config& cfg) : sim(cfg) {}
     PyMultiBookWrapper(const PyMultiBookWrapper&) = delete;
@@ -48,6 +133,9 @@ struct PyMultiBookWrapper {
 
     MultiBookSimulator sim;
     std::vector<std::shared_ptr<PyNormalizedVectorSource>> heldSources; // keep sources alive
+    std::vector<std::shared_ptr<PyNormalizedStreamSource>> heldNormalizedStreams;
+    std::vector<std::shared_ptr<PyRawStreamSource>> heldRawStreams;
+    std::vector<std::shared_ptr<PyAdapter>> heldAdapters;
 };
 } // namespace
 
@@ -69,6 +157,138 @@ PYBIND11_MODULE(_core, m) {
     py::enum_<UpdateSource>(types, "UpdateSource")
         .value("HISTORICAL", UpdateSource::HISTORICAL)
         .value("STRATEGY", UpdateSource::STRATEGY);
+
+    py::enum_<DiagnosticRecordCode>(types, "DiagnosticRecordCode")
+        .value("ADD_DUPLICATE_ORDER_ID", DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID)
+        .value("DELETE_NON_EXISTING_PAPER_ORDER_ID", DiagnosticRecordCode::DELETE_NON_EXISTING_PAPER_ORDER_ID)
+        .value("DELETE_NON_EXISTING_HISTORICAL_ORDER_ID", DiagnosticRecordCode::DELETE_NON_EXISTING_HISTORICAL_ORDER_ID)
+        .value("PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID)
+        .value("PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID)
+        .value("SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO",
+               DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO)
+        .value("SET_NON_EXISTING_ORDER_ID_IS_REJECTED", DiagnosticRecordCode::SET_NON_EXISTING_ORDER_ID_IS_REJECTED)
+        .value("PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID)
+        .value("PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID)
+        .value("REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY", DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY)
+        .value("REQUESTED_REDUCE_NON_EXISTING_ORDER_ID", DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID)
+        .value("PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID)
+        .value("PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID",
+               DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID)
+        .value("REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID",
+               DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID)
+        .value("PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE",
+               DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE)
+        .value("INVALID_UPDATE_TYPE", DiagnosticRecordCode::INVALID_UPDATE_TYPE)
+        .value("ADD_INVOKED_WITH_NEGATIVE_QUANTITY", DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY)
+        .value("REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY",
+               DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY)
+        .value("CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK",
+               DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK)
+        .value("REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY",
+               DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY)
+        .value("SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR)
+        .value("DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR)
+        .value("L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR)
+        .value("GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR)
+        .value("HEAP_ENTRY_WITHOUT_BUFFERED_EVENT", DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT)
+        .value("APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK", DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK)
+        .value("NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR)
+        .value("DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR",
+               DiagnosticRecordCode::DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR)
+        .value("SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK", DiagnosticRecordCode::SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK)
+        .value("STRATEGY_EVENT_TIME_TRAVEL", DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL)
+        .value("REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY",
+               DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY);
+
+    py::enum_<DiagnosticRecordSeverity>(types, "DiagnosticRecordSeverity")
+        .value("INFO", DiagnosticRecordSeverity::INFO)
+        .value("WARNING", DiagnosticRecordSeverity::WARNING)
+        .value("ERROR", DiagnosticRecordSeverity::ERROR);
+
+    types.def("diagnostic_code_names", []() {
+        return std::unordered_map<int, std::string>{
+            {static_cast<int>(DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID), "ADD_DUPLICATE_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::DELETE_NON_EXISTING_PAPER_ORDER_ID),
+             "DELETE_NON_EXISTING_PAPER_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::DELETE_NON_EXISTING_HISTORICAL_ORDER_ID),
+             "DELETE_NON_EXISTING_HISTORICAL_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID),
+             "PROVIDED_SIDE_ON_DELETE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID),
+             "PROVIDED_PRICE_ON_DELETE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO),
+             "SET_WITH_NEGATIVE_LIQUIDITY_REQUESTED_WAS_SET_TO_ZERO"},
+            {static_cast<int>(DiagnosticRecordCode::SET_NON_EXISTING_ORDER_ID_IS_REJECTED),
+             "SET_NON_EXISTING_ORDER_ID_IS_REJECTED"},
+            {static_cast<int>(DiagnosticRecordCode::PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID),
+             "PROVIDED_SIDE_ON_SET_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID),
+             "PROVIDED_PRICE_ON_SET_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY),
+             "REQUESTED_REDUCE_ORDER_BY_ZERO_QUANTITY"},
+            {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_NON_EXISTING_ORDER_ID),
+             "REQUESTED_REDUCE_NON_EXISTING_ORDER_ID"},
+            {static_cast<int>(
+                 DiagnosticRecordCode::PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID),
+             "PROVIDED_SIDE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_SIDE_FOR_ORDER_ID"},
+            {static_cast<int>(
+                 DiagnosticRecordCode::PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID),
+             "PROVIDED_PRICE_ON_ORDER_REDUCE_DIFFERS_FROM_ORIGINAL_PRICE_FOR_ORDER_ID"},
+            {static_cast<int>(
+                 DiagnosticRecordCode::REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID),
+             "REQUESTED_ORDER_REDUCE_WITH_VOLUME_LARGER_THAN_AVAILABLE_FOR_ORDER_ID"},
+            {static_cast<int>(DiagnosticRecordCode::PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE),
+             "PAPER_ORDER_INVOKES_PASSIVE_MATCH_INSTEAD_OF_AGGRESSIVE_TRADE"},
+            {static_cast<int>(DiagnosticRecordCode::INVALID_UPDATE_TYPE), "INVALID_UPDATE_TYPE"},
+            {static_cast<int>(DiagnosticRecordCode::ADD_INVOKED_WITH_NEGATIVE_QUANTITY),
+             "ADD_INVOKED_WITH_NEGATIVE_QUANTITY"},
+            {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY),
+             "REQUESTED_REDUCE_PAPER_ORDER_BY_NEGATIVE_QUANTITY"},
+            {static_cast<int>(DiagnosticRecordCode::CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK),
+             "CORRUPT_BOOK_PRICE_IN_ORDER_INFO_BUT_NOT_IN_BOOK"},
+            {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY),
+             "REQUESTED_REDUCE_ORDER_BY_NEGATIVE_QUANTITY"},
+            {static_cast<int>(DiagnosticRecordCode::SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR),
+             "SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR),
+             "DEPTH_AT_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR),
+             "L2_TOP_N_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR),
+             "GET_BEST_PRICE_TICKS_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT),
+             "HEAP_ENTRY_WITHOUT_BUFFERED_EVENT"},
+            {static_cast<int>(DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK),
+             "APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK"},
+            {static_cast<int>(DiagnosticRecordCode::NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR),
+             "NON_MONOTONIC_TS_RECEIVED_DETECTED_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR),
+             "DUPLICATE_STREAM_FOR_BOOK_IN_MULTI_BOOK_SIMULATOR"},
+            {static_cast<int>(DiagnosticRecordCode::SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK),
+             "SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK"},
+            {static_cast<int>(DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL), "STRATEGY_EVENT_TIME_TRAVEL"},
+            {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY),
+             "REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY"},
+        };
+    });
+
+    types.def("diagnostic_severity_names", []() {
+        return std::unordered_map<int, std::string>{
+            {static_cast<int>(DiagnosticRecordSeverity::INFO), "INFO"},
+            {static_cast<int>(DiagnosticRecordSeverity::WARNING), "WARNING"},
+            {static_cast<int>(DiagnosticRecordSeverity::ERROR), "ERROR"},
+        };
+    });
 
     // Sentinels
     types.attr("UnknownOrderIdSentinel") = py::int_(UnknownOrderIdSentinel);
@@ -234,13 +454,63 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("aggressorId", &EventApplyRecord::aggressorId)
         .def_readonly("bookKey", &EventApplyRecord::bookKey);
 
+    py::class_<DiagnosticRecord>(m, "DiagnosticRecord")
+        .def_readonly("seq", &DiagnosticRecord::seq)
+        .def_readonly("tsExchange", &DiagnosticRecord::tsExchange)
+        .def_readonly("tsReceived", &DiagnosticRecord::tsReceived)
+        .def_readonly("code", &DiagnosticRecord::code)
+        .def_readonly("severity", &DiagnosticRecord::severity)
+        .def_readonly("bookKey", &DiagnosticRecord::bookKey);
+
+    py::enum_<PaperOrderLedgerStatus>(m, "PaperOrderLedgerStatus")
+        .value("OPEN", PaperOrderLedgerStatus::OPEN)
+        .value("PARTIALLY_FILLED", PaperOrderLedgerStatus::PARTIALLY_FILLED)
+        .value("FILLED", PaperOrderLedgerStatus::FILLED)
+        .value("CANCELLED", PaperOrderLedgerStatus::CANCELLED)
+        .value("REJECTED", PaperOrderLedgerStatus::REJECTED);
+
+    py::enum_<PaperOrderFillRole>(m, "PaperOrderFillRole")
+        .value("MAKER", PaperOrderFillRole::MAKER)
+        .value("TAKER", PaperOrderFillRole::TAKER);
+
+    py::class_<PaperOrderFill>(m, "PaperOrderFill")
+        .def_readonly("seq", &PaperOrderFill::seq)
+        .def_readonly("tsExchange", &PaperOrderFill::tsExchange)
+        .def_readonly("tsReceived", &PaperOrderFill::tsReceived)
+        .def_readonly("priceTicks", &PaperOrderFill::priceTicks)
+        .def_readonly("qtyLots", &PaperOrderFill::qtyLots)
+        .def_readonly("role", &PaperOrderFill::role);
+
+    py::class_<PaperOrderState>(m, "PaperOrderState")
+        .def_readonly("orderId", &PaperOrderState::orderId)
+        .def_readonly("side", &PaperOrderState::side)
+        .def_readonly("priceTicks", &PaperOrderState::priceTicks)
+        .def_readonly("initialQty", &PaperOrderState::initialQty)
+        .def_readonly("remainingQty", &PaperOrderState::remainingQty)
+        .def_readonly("filledQty", &PaperOrderState::filledQty)
+        .def_readonly("status", &PaperOrderState::status)
+        .def_readonly("createdSeq", &PaperOrderState::createdSeq)
+        .def_readonly("lastUpdateSeq", &PaperOrderState::lastUpdateSeq);
+
+    py::class_<PaperOrderLedgerEntry>(m, "PaperOrderLedgerEntry")
+        .def_readonly("state", &PaperOrderLedgerEntry::state)
+        .def_readonly("fills", &PaperOrderLedgerEntry::fills);
+
     py::class_<InMemoryLogSink>(m, "InMemoryLogSink")
         .def(py::init<>())
         .def("reset", &InMemoryLogSink::reset)
-        .def("get_fills", [](const InMemoryLogSink& s) {
-            // return a copy so Python can hold it safely
-            return s.getFills();
-        });
+        .def("get_fills", [](const InMemoryLogSink& s) { return s.getFills(); })
+        .def("get_events", [](const InMemoryLogSink& s) { return s.getEvents(); })
+        .def("get_diagnostics", [](const InMemoryLogSink& s) { return s.getDiagnostics(); })
+        .def("get_paper_ledger", [](const InMemoryLogSink& s) { return s.getPaperLedger(); })
+        .def("find_paper_order",
+             [](const InMemoryLogSink& s, std::int64_t orderId) -> std::optional<PaperOrderLedgerEntry> {
+                 if (auto* entry = s.findPaperOrder(orderId)) {
+                     return *entry;
+                 }
+                 return std::nullopt;
+             })
+        .def("get_rejected_strategy_events", [](const InMemoryLogSink& s) { return s.getRejectedStrategyEvents(); });
 
     py::class_<InMemoryMultiLogSink>(m, "InMemoryMultiLogSink")
         .def(py::init<>())
@@ -251,7 +521,20 @@ PYBIND11_MODULE(_core, m) {
         .def("fills_for", [](const InMemoryMultiLogSink& s, const std::string& key) { return s.fillsFor(key); })
         .def("events_for", [](const InMemoryMultiLogSink& s, const std::string& key) { return s.eventsFor(key); })
         .def("diagnostics_for",
-             [](const InMemoryMultiLogSink& s, const std::string& key) { return s.diagnosticsFor(key); });
+             [](const InMemoryMultiLogSink& s, const std::string& key) { return s.diagnosticsFor(key); })
+        .def("paper_ledger", [](const InMemoryMultiLogSink& s) { return s.paperLedger(); })
+        .def("paper_ledger_for",
+             [](const InMemoryMultiLogSink& s, const std::string& key) { return s.paperLedgerFor(key); })
+        .def("find_paper_order",
+             [](const InMemoryMultiLogSink& s, const std::string& key,
+                std::int64_t orderId) -> std::optional<PaperOrderLedgerEntry> {
+                 if (auto* entry = s.findPaperOrder(key, orderId)) {
+                     return *entry;
+                 }
+                 return std::nullopt;
+             })
+        .def("rejected_strategy_events_for",
+             [](const InMemoryMultiLogSink& s, const std::string& key) { return s.rejectedStrategyEventsFor(key); });
 
     // Engine bindings
     py::class_<PaperTradingSimulator>(m, "PaperTradingSimulator")
@@ -336,6 +619,38 @@ PYBIND11_MODULE(_core, m) {
                 w.heldSources.push_back(std::move(src));
             },
             py::arg("book_id"), py::arg("events"))
+        .def(
+            "add_stream",
+            [](PyMultiBookWrapper& w, const BookId& id, py::object source, py::object adapter) {
+                if (adapter.is_none()) {
+                    auto src = std::make_shared<PyNormalizedStreamSource>(std::move(source));
+                    w.sim.addStream(id, *src);
+                    w.heldNormalizedStreams.push_back(std::move(src));
+                    return;
+                }
+                auto src = std::make_shared<PyRawStreamSource>(std::move(source));
+                auto ad = std::make_shared<PyAdapter>(std::move(adapter));
+                w.sim.addStream(id, *src, *ad);
+                w.heldRawStreams.push_back(std::move(src));
+                w.heldAdapters.push_back(std::move(ad));
+            },
+            py::arg("book_id"), py::arg("source"), py::arg("adapter") = py::none())
+        .def(
+            "init_from_l2_snapshot",
+            [](PyMultiBookWrapper& w, const BookId& id, const std::vector<Side>& sides,
+               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities) {
+                w.sim.initFromL2Snapshot(id, sides, prices, quantities);
+            },
+            py::arg("book_id"), py::arg("sides"), py::arg("prices"), py::arg("quantities"))
+        .def(
+            "init_from_l3_snapshot",
+            [](PyMultiBookWrapper& w, const BookId& id, const std::vector<Side>& sides,
+               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities,
+               const std::vector<std::int64_t>& order_ids, const std::vector<std::int64_t>& trader_ids) {
+                w.sim.initFromL3Snapshot(id, sides, prices, quantities, order_ids, trader_ids);
+            },
+            py::arg("book_id"), py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("order_ids"),
+            py::arg("trader_ids"))
         .def(
             "apply", [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev) { w.sim.apply(id, ev); },
             py::arg("book_id"), py::arg("event"))

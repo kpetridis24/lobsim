@@ -540,6 +540,51 @@ TEST_CASE("Multiple paper orders fill FIFO when trade volume is sufficient") {
     CHECK(strat[1].qtyLots == 1);
 }
 
+TEST_CASE("Resting strategy order fills when future historical orders cross its price") {
+    PaperTradingSimulator sim{};
+    InMemoryLogSink sink;
+    sim.setLogSink(&sink);
+
+    seed_l3(sim, {}, {}, {}, {}, {});
+
+    // Strategy BUY rests (book is empty, so no crossing at insert time)
+    sim.update(make_event(1, 2, Side::BUY, UpdateType::ADD, 100, 10, 9001, 901, NoAggressorNeededSentinel,
+                          UpdateSource::STRATEGY));
+    CHECK(sink.getFills().empty());
+
+    // Later historical SELL arrives below the resting bid -> should trade against the paper order
+    sim.update(make_event(3, 4, Side::SELL, UpdateType::ADD, 95, 4, 1001, 10001, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    // Another historical SELL at the bid price finishes the remainder
+    sim.update(make_event(5, 6, Side::SELL, UpdateType::ADD, 100, 6, 1002, 10002, NoAggressorNeededSentinel,
+                          UpdateSource::HISTORICAL));
+
+    const auto& fills = sink.getFills();
+    REQUIRE(fills.size() == 2);
+    CHECK(sum_fill_qty(fills) == 10);
+
+    // Both fills should show strategy as maker (passive) and historical as taker (aggressor)
+    CHECK(fills[0].makerOrderId == 9001);
+    CHECK(fills[0].makerSource == UpdateSource::STRATEGY);
+    CHECK(fills[0].takerSource == UpdateSource::HISTORICAL);
+    // Trades occur at the resting (maker) price, i.e., the paper bid of 100
+    CHECK(fills[0].priceTicks == 100);
+    CHECK(fills[0].qtyLots == 4);
+
+    CHECK(fills[1].makerOrderId == 9001);
+    CHECK(fills[1].makerSource == UpdateSource::STRATEGY);
+    CHECK(fills[1].takerSource == UpdateSource::HISTORICAL);
+    CHECK(fills[1].priceTicks == 100);
+    CHECK(fills[1].qtyLots == 6);
+
+    const auto& ledger = sink.getPaperLedger();
+    auto it = ledger.find(9001);
+    REQUIRE(it != ledger.end());
+    CHECK(it->second.state.status == PaperOrderLedgerStatus::FILLED);
+    CHECK(it->second.state.remainingQty == 0);
+}
+
 TEST_CASE("Canceling a market order behind paper does not advance paper") {
     PaperTradingSimulator sim{};
     InMemoryLogSink sink;

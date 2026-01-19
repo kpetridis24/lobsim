@@ -1,6 +1,6 @@
 """
 Minimal multibook example in Python mirroring examples/lobsim_multibook_cpp.cpp.
-Reads CoinAPI Coinbase BTC-USDT Parquet sample twice (spot/perp), replays in a MultiBookSimulator,
+Reads Coinbase BTC-USDT Parquet sample twice (spot/perp), replays in a MultiBookSimulator,
 queries best prices/topN, and injects simple strategy orders on one book.
 """
 
@@ -46,7 +46,7 @@ def parse_update_type(s: str) -> UpdateType:
 
 
 def parse_time_us(v) -> int:
-    # CoinAPI times are already in microseconds since midnight (int64)
+    # Feed times are already in microseconds since midnight (int64)
     if isinstance(v, int):
         return v
     if isinstance(v, str):
@@ -92,7 +92,7 @@ def stable_int64(s: str) -> int:
 
 
 @dataclass
-class CoinapiRaw:
+class CoinbaseRaw:
     ts_exchange_us: int
     ts_received_us: int
     update_type: str
@@ -102,13 +102,21 @@ class CoinapiRaw:
     order_id: str
 
 
-class CoinapiParquetSource:
+class CoinbaseParquetSource:
     def __init__(self, path: str | Path, batch_size: int = 512):
         self._pq = pq.ParquetFile(str(path))
         self._batch_size = batch_size
+        schema_names = self._pq.schema_arrow.names
+        recv_col = next((n for n in schema_names if n in ("time_received", "time_feed")), None)
+        if recv_col is None:
+            recv_candidates = [n for n in schema_names if "time" in n and "exchange" not in n]
+            if not recv_candidates:
+                raise ValueError("No received time column found")
+            recv_col = recv_candidates[0]
+        self._recv_col = recv_col
         self._cols = [
             "time_exchange",
-            "time_coinapi",
+            recv_col,
             "update_type",
             "is_buy",
             "entry_px",
@@ -116,14 +124,14 @@ class CoinapiParquetSource:
             "order_id",
         ]
 
-    def iter_raw(self) -> Iterable[CoinapiRaw]:
+    def iter_raw(self) -> Iterable[CoinbaseRaw]:
         for batch in self._pq.iter_batches(columns=self._cols, batch_size=self._batch_size):
             cols = {name: batch.column(i) for i, name in enumerate(self._cols)}
             n = batch.num_rows
             for i in range(n):
-                yield CoinapiRaw(
+                yield CoinbaseRaw(
                     ts_exchange_us=parse_time_us(cols["time_exchange"][i].as_py()),
-                    ts_received_us=parse_time_us(cols["time_coinapi"][i].as_py()),
+                    ts_received_us=parse_time_us(cols[self._recv_col][i].as_py()),
                     update_type=str(cols["update_type"][i].as_py()),
                     is_buy=int(cols["is_buy"][i].as_py()),
                     entry_px=float(cols["entry_px"][i].as_py()),
@@ -132,7 +140,7 @@ class CoinapiParquetSource:
                 )
 
 
-def normalize_raw(raw: CoinapiRaw, *, tick_size: float, lot_size: float, symbol: str) -> NormalizedLobEvent:
+def normalize_raw(raw: CoinbaseRaw, *, tick_size: float, lot_size: float, symbol: str) -> NormalizedLobEvent:
     ut = parse_update_type(raw.update_type)
     side = Side.BUY if raw.is_buy else Side.SELL
     price_ticks = to_ticks(raw.entry_px, tick_size, strict=True)
@@ -154,7 +162,7 @@ def normalize_raw(raw: CoinapiRaw, *, tick_size: float, lot_size: float, symbol:
 
 
 def load_normalized(path: str | Path, *, max_rows: Optional[int] = None) -> List[NormalizedLobEvent]:
-    src = CoinapiParquetSource(path)
+    src = CoinbaseParquetSource(path)
     out: List[NormalizedLobEvent] = []
     tick = 0.01
     lot = 1e-8
@@ -174,7 +182,7 @@ def print_levels(levels):
 
 
 def main():
-    data_path = Path("sample_data/coinapi_coinbase_btcusdt_sample.parquet")
+    data_path = Path("sample_data/coinbase_btcusdt_sample.parquet")
     events_spot = load_normalized(data_path, max_rows=3000)
     events_perp = load_normalized(data_path, max_rows=3000)
 

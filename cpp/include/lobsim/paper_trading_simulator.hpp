@@ -107,11 +107,14 @@ private:
 
     std::optional<std::int64_t> bestOppositePrice(bool oppositeIsAsk, const Book& oppositeBook,
                                                   std::priority_queue<std::int64_t>& oppositeHeap);
+    std::optional<std::int64_t> bestPaperOppositePrice(bool oppositeIsAsk);
 
     PaperOrderLevel& ensurePaperLevel(Side side, std::int64_t priceTicks);
     PaperOrderLevel* findPaperLevel(Side side, std::int64_t priceTicks);
     void applyPaperTradeAtLevel(Side passiveSide, std::int64_t priceTicks, std::int64_t tradeLots,
                                 const NormalizedLobEvent& aggressor);
+    std::int64_t tradeAgainstPaperLevel(Side passiveSide, std::int64_t priceTicks, std::int64_t tradeLots,
+                                        const NormalizedLobEvent& aggressor);
     void removePaperOrder(PaperOrderLevel& level, PaperOrderQueue::iterator it, std::int64_t removedQty,
                           PaperOrderStatus status);
     void reducePaperOrder(const NormalizedLobEvent& event);

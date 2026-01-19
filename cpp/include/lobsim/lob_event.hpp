@@ -24,7 +24,7 @@ struct NormalizedLobEvent {
     std::string symbolId;
 };
 
-struct CoinapiCoinbaseBTCUSDTRawEvent {
+struct CoinbaseBTCUSDTRawEvent {
     std::int64_t tsExchangeUs{};
     std::int64_t tsReceivedUs{};
 

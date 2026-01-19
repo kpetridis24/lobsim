@@ -19,11 +19,6 @@
 #include <utility>
 #include <vector>
 
-/**
- * TODO:
- * - Implement insertStrategyOrder API or equivalent
- */
-
 class MultiBookSimulator {
 public:
     struct Config {
@@ -62,6 +57,29 @@ public:
 
     PaperTradingSimulator* getBook(const BookId& id) { return getBookKey(bookKey(id)); }
     const PaperTradingSimulator* getBook(const BookId& id) const { return getBookKey(bookKey(id)); }
+
+    void initFromL2Snapshot(const BookId& id, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                            const std::vector<std::int64_t>& quantities) {
+        auto* book = getBook(id);
+        if (!book) {
+            emitDiagnostic(bookKey(id), DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return;
+        }
+        book->initFromL2Snapshot(sides, prices, quantities);
+    }
+
+    void initFromL3Snapshot(const BookId& id, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                            const std::vector<std::int64_t>& quantities, const std::vector<std::int64_t>& orderIds,
+                            const std::vector<std::int64_t>& traderIds) {
+        auto* book = getBook(id);
+        if (!book) {
+            emitDiagnostic(bookKey(id), DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK,
+                           DiagnosticRecordSeverity::ERROR, 0, -1, -1);
+            return;
+        }
+        book->initFromL3Snapshot(sides, prices, quantities, orderIds, traderIds);
+    }
 
     PaperTradingSimulator* getBookKey(std::string_view key) {
         auto it = books_.find(std::string(key));

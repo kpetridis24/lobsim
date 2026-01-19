@@ -1,5 +1,5 @@
-#include "lobsim/coinapi_coinbase_btcusdt_adapter.hpp"
-#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/coinbase_btcusdt_adapter.hpp"
+#include "lobsim/coinbase_btcusdt_parquet_source.hpp"
 #include "lobsim/instrument.hpp"
 #include "lobsim/log_sink.hpp"
 #include "lobsim/paper_trading_simulator.hpp"
@@ -37,7 +37,7 @@ struct CountingSink final : public ILogSink {
 };
 
 struct Options {
-    std::string path{"sample_data/coinapi_coinbase_btcusdt_sample.parquet"};
+    std::string path{"sample_data/coinbase_btcusdt_sample.parquet"};
     std::string tickSize{"0.01"};
     std::string lotSize{"0.00000001"};
     std::string symbol{"BTC-USDT"};
@@ -156,20 +156,20 @@ int main(int argc, char** argv) {
 
     lobsim::replay::InstrumentSpec spec{};
     spec.symbol = opt.symbol;
-    spec.venue = "coinapi";
+    spec.venue = "coinbase";
     spec.tickSize = parseDecimal(opt.tickSize);
     spec.lotSize = parseDecimal(opt.lotSize);
     spec.pricePolicy = lobsim::replay::RoundingPolicy::Nearest;
     spec.qtyPolicy = lobsim::replay::RoundingPolicy::Nearest;
 
-    lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
-    lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource source(opt.path);
+    lobsim::replay::CoinbaseBTCUSDTAdapter adapter(spec);
+    lobsim::replay::CoinbaseBTCUSDTParquetSource source(opt.path);
     lobsim::replay::ReplayConfig cfg{};
     cfg.requireMonotonicTsReceived = true;
     cfg.failFast = true;
     lobsim::replay::ReplaySession replay(engine, cfg);
 
-    CoinapiCoinbaseBTCUSDTRawEvent raw{};
+    CoinbaseBTCUSDTRawEvent raw{};
     lobsim::replay::RunSummary summary{};
 
     bool hasRange = false;

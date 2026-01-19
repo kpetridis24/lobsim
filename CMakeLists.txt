@@ -59,7 +59,7 @@ target_compile_definitions(lobsim_core PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}
 
 # ---- Arrow/Parquet IO library (optional for Python users) ----
 add_library(lobsim_parquet
-  cpp/src/coinapi_coinbase_btcusdt_parquet_source.cpp
+  cpp/src/coinbase_btcusdt_parquet_source.cpp
 )
 add_library(lobsim::parquet ALIAS lobsim_parquet)
 

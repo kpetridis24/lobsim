@@ -4,7 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${root_dir}/build"
 out_dir="${build_dir}/fill_compare"
-data_path="${1:-${root_dir}/sample_data/coinapi_coinbase_btcusdt_sample.parquet}"
+data_path="${1:-${root_dir}/sample_data/coinbase_btcusdt_sample.parquet}"
 
 mkdir -p "${out_dir}"
 cpp_out="${out_dir}/fills_cpp.csv"
@@ -102,7 +102,7 @@ def fnv1a_64_signed(value: str) -> int:
 
 
 @dataclass
-class CoinapiRawEvent:
+class CoinbaseRawEvent:
     ts_exchange_us: int
     ts_received_us: int
     update_type: str
@@ -112,13 +112,21 @@ class CoinapiRawEvent:
     order_id: str
 
 
-class CoinapiCoinbaseBTCUSDTSource:
+class CoinbaseBTCUSDTSource:
     def __init__(self, path: str | Path, batch_size: int = 128):
         self._pq = pq.ParquetFile(str(path))
         self._batch_size = batch_size
+        schema_names = self._pq.schema_arrow.names
+        recv_col = next((n for n in schema_names if n in ("time_received", "time_feed")), None)
+        if recv_col is None:
+            recv_candidates = [n for n in schema_names if "time" in n and "exchange" not in n]
+            if not recv_candidates:
+                raise ValueError("No received time column found")
+            recv_col = recv_candidates[0]
+        self._recv_col = recv_col
         self._cols = [
             "time_exchange",
-            "time_coinapi",
+            recv_col,
             "update_type",
             "is_buy",
             "entry_px",
@@ -126,16 +134,16 @@ class CoinapiCoinbaseBTCUSDTSource:
             "order_id",
         ]
 
-    def __iter__(self) -> Iterable[CoinapiRawEvent]:
+    def __iter__(self) -> Iterable[CoinbaseRawEvent]:
         for batch in self._pq.iter_batches(
             columns=self._cols, batch_size=self._batch_size
         ):
             cols = {name: batch.column(i) for i, name in enumerate(self._cols)}
             n = batch.num_rows
             for i in range(n):
-                yield CoinapiRawEvent(
+                yield CoinbaseRawEvent(
                     ts_exchange_us=parse_time_us(cols["time_exchange"][i].as_py()),
-                    ts_received_us=parse_time_us(cols["time_coinapi"][i].as_py()),
+                    ts_received_us=parse_time_us(cols[self._recv_col][i].as_py()),
                     update_type=str(cols["update_type"][i].as_py()),
                     is_buy=int(cols["is_buy"][i].as_py()),
                     entry_px=float(cols["entry_px"][i].as_py()),
@@ -144,13 +152,13 @@ class CoinapiCoinbaseBTCUSDTSource:
                 )
 
 
-class CoinapiCoinbaseBTCUSDTAdapter:
+class CoinbaseBTCUSDTAdapter:
     def __init__(self, *, tick_size: float, lot_size: float, symbol_id: str = "BTC-USDT"):
         self.tick_size = tick_size
         self.lot_size = lot_size
         self.symbol_id = symbol_id
 
-    def normalize(self, raw: CoinapiRawEvent) -> NormalizedLobEvent:
+    def normalize(self, raw: CoinbaseRawEvent) -> NormalizedLobEvent:
         if raw.ts_exchange_us < 0 or raw.ts_received_us < 0:
             raise ValueError("negative timestamp")
         if raw.entry_px < 0 or raw.entry_sx < 0:
@@ -188,8 +196,8 @@ def main() -> None:
     sink = InMemoryLogSink()
     engine.set_log_sink(sink)
 
-    adapter = CoinapiCoinbaseBTCUSDTAdapter(tick_size=0.01, lot_size=1e-8)
-    source = CoinapiCoinbaseBTCUSDTSource(data_path)
+    adapter = CoinbaseBTCUSDTAdapter(tick_size=0.01, lot_size=1e-8)
+    source = CoinbaseBTCUSDTSource(data_path)
 
     cfg = ReplayConfig(require_monotonic_ts_received=True, fail_fast=True)
     replay = ReplaySession(engine, cfg)
