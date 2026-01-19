@@ -57,9 +57,9 @@ python -c "import lobsim; from lobsim.engine import PaperTradingSimulator; print
 ```
 
 ## Examples
-### CoinAPI BTC/USDT parquet replay (C++)
+### BTC/USDT parquet replay (C++)
 ```bash
-./scripts/run_cpp_example.sh sample_data/coinapi_coinbase_btcusdt_sample.parquet
+./scripts/run_cpp_example.sh sample_data/coinbase_btcusdt_sample.parquet
 ```
 
 ### LOBSTER AMZN message+orderbook replay (Python)
@@ -72,7 +72,7 @@ PYTHONPATH=python python examples/lobsim_lobster_py.py \
 ### Compare fills: C++ vs Python (same dataset)
 Runs both implementations and diffs the full fill stream (all fields).
 ```bash
-./scripts/compare_cpp_python_fills.sh sample_data/coinapi_coinbase_btcusdt_sample.parquet
+./scripts/compare_cpp_python_fills.sh sample_data/coinbase_btcusdt_sample.parquet
 ```
 
 ## Benchmarks
@@ -82,7 +82,7 @@ Two benchmark entry points are provided:
 
 Run both:
 ```bash
-./scripts/run_benchmarks.sh sample_data/coinapi_coinbase_btcusdt_sample.parquet
+./scripts/run_benchmarks.sh sample_data/coinbase_btcusdt_sample.parquet
 ```
 
 Notes:

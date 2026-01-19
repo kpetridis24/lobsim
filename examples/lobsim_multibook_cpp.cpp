@@ -1,5 +1,5 @@
-#include "lobsim/coinapi_coinbase_btcusdt_adapter.hpp"
-#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/coinbase_btcusdt_adapter.hpp"
+#include "lobsim/coinbase_btcusdt_parquet_source.hpp"
 #include "lobsim/in_memory_sink.hpp"
 #include "lobsim/instrument.hpp"
 #include "lobsim/multi_log_sink.hpp"
@@ -51,7 +51,7 @@ void dump_fills(const InMemoryMultiLogSink& sink) {
 } // namespace
 
 int main(int argc, char** argv) {
-    const std::string path = (argc > 1) ? std::string(argv[1]) : "sample_data/coinapi_coinbase_btcusdt_sample.parquet";
+    const std::string path = (argc > 1) ? std::string(argv[1]) : "sample_data/coinbase_btcusdt_sample.parquet";
 
     MultiBookSimulator sim(MultiBookSimulator::Config{
         .requireMonotonicTsReceived = true,
@@ -68,10 +68,10 @@ int main(int argc, char** argv) {
     sim.addBook(perp);
 
     auto spec = make_btcusdt_spec();
-    CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
+    CoinbaseBTCUSDTAdapter adapter(spec);
 
-    CoinapiCoinbaseBTCUSDTParquetSource sourceSpot(path);
-    CoinapiCoinbaseBTCUSDTParquetSource sourcePerp(path);
+    CoinbaseBTCUSDTParquetSource sourceSpot(path);
+    CoinbaseBTCUSDTParquetSource sourcePerp(path);
 
     sim.addStream(spot, sourceSpot, adapter);
     sim.addStream(perp, sourcePerp, adapter);

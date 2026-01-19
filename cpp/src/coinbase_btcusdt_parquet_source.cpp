@@ -1,4 +1,4 @@
-#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/coinbase_btcusdt_parquet_source.hpp"
 
 #include "lobsim/types.hpp"
 
@@ -9,6 +9,7 @@
 #include <memory>
 #include <parquet/arrow/reader.h>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -89,7 +90,7 @@ static std::int64_t parseHhMmSsToUs(std::string_view sv) {
     return us + frac;
 }
 
-struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
+struct CoinbaseBTCUSDTParquetSource::Impl {
     std::unique_ptr<parquet::arrow::FileReader> reader;
     std::shared_ptr<arrow::RecordBatchReader> rb_reader;
     std::shared_ptr<arrow::RecordBatch> batch;
@@ -97,7 +98,7 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
     std::int64_t globalRow = 0;
 
     int col_time_exchange = -1;
-    int col_time_coinapi = -1;
+    int col_time_feed = -1;
     int col_update_type = -1;
     int col_is_buy = -1;
     int col_entry_px = -1;
@@ -105,9 +106,9 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
     int col_order_id = -1;
 
     bool time_exchange_is_string = true;
-    bool time_coinapi_is_string = true;
+    bool time_feed_is_string = true;
     arrow::TimeUnit::type time_exchange_unit{};
-    arrow::TimeUnit::type time_coinapi_unit{};
+    arrow::TimeUnit::type time_feed_unit{};
 
     explicit Impl(std::string path, std::int64_t batchSizeRows) {
         auto infile_res = arrow::io::ReadableFile::Open(path);
@@ -141,7 +142,24 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         };
 
         col_time_exchange = idx("time_exchange");
-        col_time_coinapi = idx("time_coinapi");
+        auto find_time_feed = [&]() -> int {
+            int i = schema->GetFieldIndex("time_received");
+            if (i < 0)
+                i = schema->GetFieldIndex("time_feed");
+            if (i < 0) {
+                for (int k = 0; k < schema->num_fields(); ++k) {
+                    auto name = schema->field(k)->name();
+                    if (name.find("time") != std::string::npos && name.find("exchange") == std::string::npos) {
+                        i = k;
+                        break;
+                    }
+                }
+            }
+            if (i < 0)
+                throw std::runtime_error("Missing required received time column.");
+            return i;
+        };
+        col_time_feed = find_time_feed();
         col_update_type = idx("update_type");
         col_is_buy = idx("is_buy");
         col_entry_px = idx("entry_px");
@@ -150,10 +168,10 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
 
         // Detect time column physical types
         auto t0 = schema->field(col_time_exchange)->type();
-        auto t1 = schema->field(col_time_coinapi)->type();
+        auto t1 = schema->field(col_time_feed)->type();
 
         time_exchange_is_string = (t0->id() == arrow::Type::STRING) || (t0->id() == arrow::Type::LARGE_STRING);
-        time_coinapi_is_string = (t1->id() == arrow::Type::STRING) || (t1->id() == arrow::Type::LARGE_STRING);
+        time_feed_is_string = (t1->id() == arrow::Type::STRING) || (t1->id() == arrow::Type::LARGE_STRING);
 
         if (!time_exchange_is_string) {
             if (t0->id() == arrow::Type::TIME64) {
@@ -164,13 +182,13 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
                 throw std::runtime_error("Unsupported time_exchange type.");
             }
         }
-        if (!time_coinapi_is_string) {
+        if (!time_feed_is_string) {
             if (t1->id() == arrow::Type::TIME64) {
-                time_coinapi_unit = std::static_pointer_cast<arrow::Time64Type>(t1)->unit();
+                time_feed_unit = std::static_pointer_cast<arrow::Time64Type>(t1)->unit();
             } else if (t1->id() == arrow::Type::INT64) {
                 // assume already microseconds since midnight
             } else {
-                throw std::runtime_error("Unsupported time_coinapi type.");
+                throw std::runtime_error("Unsupported received time type.");
             }
         }
 
@@ -179,8 +197,8 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         for (int i = 0; i < static_cast<int>(row_groups.size()); ++i)
             row_groups[i] = i;
 
-        std::vector<int> cols{col_time_exchange, col_time_coinapi, col_update_type, col_is_buy,
-                              col_entry_px,      col_entry_sx,     col_order_id};
+        std::vector<int> cols{col_time_exchange, col_time_feed, col_update_type, col_is_buy,
+                              col_entry_px,      col_entry_sx,   col_order_id};
 
         std::shared_ptr<arrow::RecordBatchReader> rb_reader_local;
         st = reader->GetRecordBatchReader(row_groups, cols, &rb_reader_local);
@@ -233,7 +251,7 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
         throw std::runtime_error("Unsupported time array type.");
     }
 
-    bool next(CoinapiCoinbaseBTCUSDTRawEvent& out) {
+    bool next(CoinbaseBTCUSDTRawEvent& out) {
         while (true) {
             if (!batch || rowInBatch >= batch->num_rows()) {
                 if (!loadNextBatch())
@@ -244,9 +262,9 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
 
             // Column order in reader matches cols vector order, not original schema indices
             // We requested 7 columns in that exact order:
-            // [time_exchange, time_coinapi, update_type, is_buy, entry_px, entry_sx, order_id]
+            // [time_exchange, time_feed, update_type, is_buy, entry_px, entry_sx, order_id]
             auto a_time_exchange = batch->column(0);
-            auto a_time_coinapi = batch->column(1);
+            auto a_time_feed = batch->column(1);
             auto a_update_type = batch->column(2);
             auto a_is_buy = batch->column(3);
             auto a_entry_px = batch->column(4);
@@ -254,7 +272,7 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
             auto a_order_id = batch->column(6);
 
             out.tsExchangeUs = readTimeUs(a_time_exchange, r, time_exchange_is_string, time_exchange_unit);
-            out.tsReceivedUs = readTimeUs(a_time_coinapi, r, time_coinapi_is_string, time_coinapi_unit);
+            out.tsReceivedUs = readTimeUs(a_time_feed, r, time_feed_is_string, time_feed_unit);
 
             if (a_update_type->IsNull(r))
                 throw std::runtime_error("Null update_type at row " + std::to_string(globalRow));
@@ -316,12 +334,12 @@ struct CoinapiCoinbaseBTCUSDTParquetSource::Impl {
     }
 };
 
-CoinapiCoinbaseBTCUSDTParquetSource::CoinapiCoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batchSizeRows)
+CoinbaseBTCUSDTParquetSource::CoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batchSizeRows)
     : impl(std::make_unique<Impl>(std::move(path), batchSizeRows)) {}
 
-CoinapiCoinbaseBTCUSDTParquetSource::~CoinapiCoinbaseBTCUSDTParquetSource() = default;
+CoinbaseBTCUSDTParquetSource::~CoinbaseBTCUSDTParquetSource() = default;
 
-bool CoinapiCoinbaseBTCUSDTParquetSource::next(CoinapiCoinbaseBTCUSDTRawEvent& out) {
+bool CoinbaseBTCUSDTParquetSource::next(CoinbaseBTCUSDTRawEvent& out) {
     return impl->next(out);
 }
 

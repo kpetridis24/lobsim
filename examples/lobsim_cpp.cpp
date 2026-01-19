@@ -1,5 +1,5 @@
-#include "lobsim/coinapi_coinbase_btcusdt_adapter.hpp"
-#include "lobsim/coinapi_coinbase_btcusdt_parquet_source.hpp"
+#include "lobsim/coinbase_btcusdt_adapter.hpp"
+#include "lobsim/coinbase_btcusdt_parquet_source.hpp"
 #include "lobsim/in_memory_sink.hpp"
 #include "lobsim/instrument.hpp"
 #include "lobsim/lob_event.hpp"
@@ -57,7 +57,7 @@ void write_fills_csv(const InMemoryLogSink& sink, const std::string& path) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string path = "../sample_data/coinapi_coinbase_btcusdt_sample.parquet";
+    std::string path = "../sample_data/coinbase_btcusdt_sample.parquet";
     std::string dump_fills_path;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -78,15 +78,15 @@ int main(int argc, char** argv) {
         engine.setLogSink(&sink);
 
         auto spec = make_btcusdt_spec();
-        lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
-        lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource source(path);
+        lobsim::replay::CoinbaseBTCUSDTAdapter adapter(spec);
+        lobsim::replay::CoinbaseBTCUSDTParquetSource source(path);
 
         lobsim::replay::ReplayConfig cfg{};
         cfg.requireMonotonicTsReceived = true;
         cfg.failFast = true;
         lobsim::replay::ReplaySession replay(engine, cfg);
-        using RawEvent = CoinapiCoinbaseBTCUSDTRawEvent;
-        replay.run<lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource, lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter,
+        using RawEvent = CoinbaseBTCUSDTRawEvent;
+        replay.run<lobsim::replay::CoinbaseBTCUSDTParquetSource, lobsim::replay::CoinbaseBTCUSDTAdapter,
                    RawEvent>(source, adapter, cfg);
         write_fills_csv(sink, dump_fills_path);
         return 0;
@@ -99,14 +99,14 @@ int main(int argc, char** argv) {
         engine.setLogSink(&sink);
 
         auto spec = make_btcusdt_spec();
-        lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
-        lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource source(path);
+        lobsim::replay::CoinbaseBTCUSDTAdapter adapter(spec);
+        lobsim::replay::CoinbaseBTCUSDTParquetSource source(path);
 
         lobsim::replay::ReplayConfig cfg{.requireMonotonicTsReceived = true, .failFast = true};
         lobsim::replay::ReplaySession replay(engine, cfg);
-        using RawEvent = CoinapiCoinbaseBTCUSDTRawEvent;
-        auto summary = replay.run<lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource,
-                                  lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter, RawEvent>(source, adapter, cfg);
+        using RawEvent = CoinbaseBTCUSDTRawEvent;
+        auto summary = replay.run<lobsim::replay::CoinbaseBTCUSDTParquetSource,
+                                  lobsim::replay::CoinbaseBTCUSDTAdapter, RawEvent>(source, adapter, cfg);
         std::cout << "Replay summary: first_ts=" << summary.firstTsReceived << " last_ts=" << summary.lastTsReceived
                   << " raw=" << summary.numRawEvents << " normalized=" << summary.numNormalizedEvents
                   << " adapter_failures=" << summary.numAdapterFailures << " num_fills=" << sink.getFills().size()
@@ -119,10 +119,10 @@ int main(int argc, char** argv) {
         engine.setLogSink(&sink);
 
         auto spec = make_btcusdt_spec();
-        lobsim::replay::CoinapiCoinbaseBTCUSDTAdapter adapter(spec);
-        lobsim::replay::CoinapiCoinbaseBTCUSDTParquetSource source(path);
+        lobsim::replay::CoinbaseBTCUSDTAdapter adapter(spec);
+        lobsim::replay::CoinbaseBTCUSDTParquetSource source(path);
 
-        CoinapiCoinbaseBTCUSDTRawEvent raw{};
+        CoinbaseBTCUSDTRawEvent raw{};
         std::int64_t i = 0;
 
         while (source.next(raw)) {

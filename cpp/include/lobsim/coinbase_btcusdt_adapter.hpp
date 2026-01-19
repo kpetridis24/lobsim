@@ -15,18 +15,18 @@
 
 namespace lobsim::replay {
 
-struct CoinapiCoinbaseBTCUSDTAdapter {
-    explicit CoinapiCoinbaseBTCUSDTAdapter(InstrumentSpec spec) : spec_(std::move(spec)) {}
+struct CoinbaseBTCUSDTAdapter {
+    explicit CoinbaseBTCUSDTAdapter(InstrumentSpec spec) : spec_(std::move(spec)) {}
 
-    NormalizedLobEvent normalize(const CoinapiCoinbaseBTCUSDTRawEvent& raw) const {
+    NormalizedLobEvent normalize(const CoinbaseBTCUSDTRawEvent& raw) const {
         NormalizedLobEvent out{};
         if (!tryNormalize(raw, out)) {
-            throw std::runtime_error("Failed to normalize CoinAPI Coinbase BTC/USDT raw event");
+            throw std::runtime_error("Failed to normalize Coinbase BTC/USDT raw event");
         }
         return out;
     }
 
-    bool tryNormalize(const CoinapiCoinbaseBTCUSDTRawEvent& raw, NormalizedLobEvent& out) const {
+    bool tryNormalize(const CoinbaseBTCUSDTRawEvent& raw, NormalizedLobEvent& out) const {
         if (raw.tsExchangeUs < 0 || raw.tsReceivedUs < 0)
             return false;
 
@@ -74,6 +74,6 @@ private:
     InstrumentSpec spec_{};
 };
 
-static_assert(IEventAdapter<CoinapiCoinbaseBTCUSDTAdapter, CoinapiCoinbaseBTCUSDTRawEvent>);
+static_assert(IEventAdapter<CoinbaseBTCUSDTAdapter, CoinbaseBTCUSDTRawEvent>);
 
 } // namespace lobsim::replay
