@@ -198,7 +198,7 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
             row_groups[i] = i;
 
         std::vector<int> cols{col_time_exchange, col_time_feed, col_update_type, col_is_buy,
-                              col_entry_px,      col_entry_sx,   col_order_id};
+                              col_entry_px,      col_entry_sx,  col_order_id};
 
         std::shared_ptr<arrow::RecordBatchReader> rb_reader_local;
         st = reader->GetRecordBatchReader(row_groups, cols, &rb_reader_local);

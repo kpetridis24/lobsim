@@ -209,6 +209,27 @@ void PaperTradingSimulator::onAdd(const NormalizedLobEvent& event) {
         }
     }
 
+    // If historical aggressor still crosses paper orders, trade against them
+    if (!paper && remaining > 0) {
+        auto bestPaperOpp = [&]() { return bestPaperOppositePrice(oppIsAsk); };
+        while (remaining > 0) {
+            auto paperPx = bestPaperOpp();
+            if (!paperPx.has_value()) {
+                break;
+            }
+            const bool stillCrosses = isBid ? (event.priceTicks >= *paperPx) : (event.priceTicks <= *paperPx);
+            if (!stillCrosses) {
+                break;
+            }
+            const auto traded = tradeAgainstPaperLevel(oppIsAsk ? Side::SELL : Side::BUY, *paperPx, remaining, event);
+            if (traded <= 0) {
+                // Nothing traded; avoid infinite loop
+                break;
+            }
+            remaining -= traded;
+        }
+    }
+
     if (remaining > 0) {
         if (paper) {
             auto& level = ensurePaperLevel(event.side, event.priceTicks);
@@ -258,6 +279,30 @@ std::optional<std::int64_t> PaperTradingSimulator::bestOppositePrice(bool opposi
         oppositeHeap.pop();
     }
     return std::nullopt;
+}
+
+std::optional<std::int64_t> PaperTradingSimulator::bestPaperOppositePrice(bool oppositeIsAsk) {
+    const auto& levels = oppositeIsAsk ? paperAsks : paperBids;
+    std::optional<std::int64_t> best;
+    for (const auto& [px, level] : levels) {
+        if (level.queuedLots <= 0) {
+            continue;
+        }
+        if (!best) {
+            best = px;
+            continue;
+        }
+        if (oppositeIsAsk) {
+            if (px < *best) {
+                best = px;
+            }
+        } else {
+            if (px > *best) {
+                best = px;
+            }
+        }
+    }
+    return best;
 }
 
 PaperTradingSimulator::PaperOrderLevel& PaperTradingSimulator::ensurePaperLevel(Side side, std::int64_t priceTicks) {
@@ -387,6 +432,72 @@ void PaperTradingSimulator::applyPaperTradeAtLevel(Side passiveSide, std::int64_
     }
 }
 
+std::int64_t PaperTradingSimulator::tradeAgainstPaperLevel(Side passiveSide, std::int64_t priceTicks,
+                                                           std::int64_t tradeLots,
+                                                           const NormalizedLobEvent& aggressor) {
+    if (tradeLots <= 0) {
+        return 0;
+    }
+    auto& levels = passiveSide == Side::BUY ? paperBids : paperAsks;
+    auto levelIt = levels.find(priceTicks);
+    if (levelIt == levels.end()) {
+        return 0;
+    }
+    auto& level = levelIt->second;
+    auto it = level.orders.begin();
+    std::int64_t consumed = 0;
+    while (tradeLots > 0 && it != level.orders.end()) {
+        const auto orderId = *it;
+        auto orderIt = paperOrders.find(orderId);
+        if (orderIt == paperOrders.end()) {
+            auto next = std::next(it);
+            level.orders.erase(it);
+            paperOrderInfo.erase(orderId);
+            it = next;
+            continue;
+        }
+        auto& order = orderIt->second;
+        if (order.remainingQty <= 0 || order.status == PaperOrderStatus::FILLED ||
+            order.status == PaperOrderStatus::CANCELLED || order.status == PaperOrderStatus::REJECTED) {
+            auto next = std::next(it);
+            level.orders.erase(it);
+            paperOrderInfo.erase(orderId);
+            paperOrders.erase(orderIt);
+            it = next;
+            continue;
+        }
+
+        const auto fillQty = std::min(order.remainingQty, tradeLots);
+        if (fillQty > 0 && sink) {
+            auto makerSide = passiveSide;
+            auto takerSide = passiveSide == Side::BUY ? Side::SELL : Side::BUY;
+            sink->onFill(FillRecord{seq, aggressor.tsExchange, aggressor.tsReceived, priceTicks, fillQty, makerSide,
+                                    orderId, order.originalEvent.traderId, UpdateSource::STRATEGY, takerSide,
+                                    aggressor.orderId, aggressor.traderId, aggressor.updateSource, aggressor.symbolId});
+        }
+
+        order.remainingQty -= fillQty;
+        tradeLots -= fillQty;
+        consumed += fillQty;
+
+        if (order.remainingQty == 0) {
+            auto next = std::next(it);
+            removePaperOrder(level, it, fillQty, PaperOrderStatus::FILLED);
+            it = next;
+        } else {
+            order.status = PaperOrderStatus::PARTIALLY_FILLED;
+            level.queuedLots -= fillQty;
+            level.paperQty.add(order.paperIndex, -fillQty);
+            ++it;
+        }
+    }
+
+    if (level.orders.empty()) {
+        levels.erase(levelIt);
+    }
+    return consumed;
+}
+
 void PaperTradingSimulator::removePaperOrder(PaperOrderLevel& level, PaperOrderQueue::iterator it,
                                              std::int64_t removedQty, PaperOrderStatus status) {
     const auto orderId = *it;
@@ -426,6 +537,8 @@ void PaperTradingSimulator::reducePaperOrder(const NormalizedLobEvent& event) {
         return;
     }
     if (event.quantityLots == 0) {
+        emitDiagnostic(event, DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY,
+                       DiagnosticRecordSeverity::WARNING);
         return;
     }
 
