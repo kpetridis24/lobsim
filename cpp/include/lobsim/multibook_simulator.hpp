@@ -19,11 +19,6 @@
 #include <utility>
 #include <vector>
 
-/**
- * TODO:
- * - Implement insertStrategyOrder API or equivalent
- */
-
 class MultiBookSimulator {
 public:
     struct Config {

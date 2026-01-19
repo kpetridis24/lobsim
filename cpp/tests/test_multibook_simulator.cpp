@@ -523,6 +523,59 @@ TEST_CASE("Strategy events merge with feeds honoring latency and ordering") {
     REQUIRE(order[2] == "X:STRAT:11");
 }
 
+TEST_CASE("Strategy event latency shifts tsReceived when provided") {
+    MultiBookSimulator sim;
+    InMemoryMultiLogSink sink;
+    sim.setMultiLogSink(&sink);
+
+    BookId id{"X", "LAT"};
+    NormalizedVectorSource src({makeEvent("LAT", 1, 10, Side::SELL, UpdateType::ADD, 100, 5, 1)});
+    sim.addStream(id, src);
+
+    // Establish current time at 10
+    REQUIRE(sim.step());
+    REQUIRE(sim.currentTime().has_value());
+    REQUIRE(sim.currentTime().value() == 10);
+
+    // tsReceived=0 should be based on current time + latency
+    NormalizedLobEvent strat = makeEvent("LAT", 1, 0, Side::BUY, UpdateType::ADD, 100, 1, 2);
+    sim.submitStrategyEvent(id, strat, 5); // expect tsReceived = 15
+
+    // Non-zero tsReceived should also get latency added
+    NormalizedLobEvent strat2 = makeEvent("LAT", 1, 20, Side::BUY, UpdateType::ADD, 100, 1, 3);
+    sim.submitStrategyEvent(id, strat2, 5); // expect tsReceived = 25
+
+    std::vector<std::int64_t> appliedTs;
+    while (sim.step()) {
+        appliedTs.push_back(sink.events().back().tsReceived);
+    }
+    REQUIRE(appliedTs.size() == 2);
+    REQUIRE(appliedTs[0] == 15);
+    REQUIRE(appliedTs[1] == 25);
+}
+
+TEST_CASE("Negative latency that causes time travel emits diagnostic") {
+    MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = false});
+    InMemoryMultiLogSink sink;
+    sim.setMultiLogSink(&sink);
+
+    BookId id{"X", "LATNEG"};
+    NormalizedVectorSource src({makeEvent("LATNEG", 1, 10, Side::SELL, UpdateType::ADD, 100, 5, 1)});
+    sim.addStream(id, src);
+    REQUIRE(sim.step()); // current time = 10
+
+    NormalizedLobEvent strat = makeEvent("LATNEG", 1, 0, Side::BUY, UpdateType::ADD, 100, 1, 2);
+    sim.submitStrategyEvent(id, strat, -6); // would backdate to 4 -> should be rejected
+
+    // No additional events applied
+    REQUIRE_FALSE(sim.step());
+
+    auto diags = sink.diagnostics();
+    REQUIRE_FALSE(diags.empty());
+    REQUIRE(diags.back().code == DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL);
+    REQUIRE(diags.back().bookKey == "X:LATNEG");
+}
+
 TEST_CASE("Strategy event into unknown book emits diagnostic and optional throw") {
     {
         MultiBookSimulator sim(MultiBookSimulator::Config{.requireMonotonicTsReceived = true, .failFast = false});
