@@ -4,10 +4,13 @@ lobsim/__init__.py
 lobsim/__init__.pyi
 lobsim/_core.cpython-311-darwin.so
 lobsim/_core.pyi
+lobsim/cli.py
 lobsim/engine.py
 lobsim/engine.pyi
 lobsim/lob_event.py
 lobsim/lob_event.pyi
+lobsim/multibook.py
+lobsim/multibook.pyi
 lobsim/replay.py
 lobsim/replay.pyi
 lobsim/sink.py
@@ -17,6 +20,9 @@ lobsim/types.pyi
 lobsim.egg-info/PKG-INFO
 lobsim.egg-info/SOURCES.txt
 lobsim.egg-info/dependency_links.txt
+lobsim.egg-info/entry_points.txt
 lobsim.egg-info/top_level.txt
 lobsim/_core/__init__.pyi
 lobsim/_core/types.pyi
+lobsim/demo_utils/__init__.py
+lobsim/demo_utils/common.py

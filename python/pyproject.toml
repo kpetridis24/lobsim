@@ -8,3 +8,6 @@ version = "0.1.0"
 description = "LOBSIM Python bindings"
 authors = [{ name = "LOBSIM", email = "devnull@example.com" }]
 requires-python = ">=3.11"
+
+[project.scripts]
+lobsim = "lobsim.cli:main"

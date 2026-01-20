@@ -6,4 +6,5 @@ setup(
     description="LOBSIM Python bindings",
     packages=find_packages(exclude=("tests", "tests.*")),
     package_data={"lobsim": ["*.pyi", "_core*.so"]},
+    entry_points={"console_scripts": ["lobsim=lobsim.cli:main"]},
 )

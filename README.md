@@ -57,6 +57,20 @@ python -c "import lobsim; from lobsim.engine import PaperTradingSimulator; print
 ```
 
 ## Examples
+### Streamlit demos (recommended)
+After building the Python bindings (see Quickstart), install demo deps and run:
+```bash
+python -m pip install streamlit plotly pyarrow
+
+lobsim demo replay   # replay explorer
+lobsim demo trend    # trend-following baseline
+```
+
+If your shell can’t find the `lobsim` command, run the same via:
+```bash
+python -m lobsim.cli demo replay
+```
+
 ### BTC/USDT parquet replay (C++)
 ```bash
 ./scripts/run_cpp_example.sh sample_data/coinbase_btcusdt_sample.parquet
