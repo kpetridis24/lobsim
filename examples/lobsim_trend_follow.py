@@ -1102,7 +1102,7 @@ def main():
         batch_size = st.slider("Batch size", min_value=50, max_value=2000, value=200, step=50)
         symbol = st.text_input("Symbol id", value="BTC-USDT")
 
-        st.header("Risk (realistic constraints)")
+        st.header("Risk")
         starting_cash = st.number_input("Starting cash (USDT)", value=10_000.0, min_value=0.0, step=100.0)
         allow_short = st.checkbox("Allow shorting", value=False)
         max_position = st.number_input("Max abs position (units)", value=0.003, min_value=0.0, step=0.001, format="%.6f")
