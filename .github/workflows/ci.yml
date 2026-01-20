@@ -104,11 +104,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e python
 
+      - name: Install pyarrow (for fill comparison)
+        run: python -m pip install pyarrow
+        
       - name: Smoke import
         run: python -c "import lobsim; import lobsim._core; print('lobsim import OK')"
 
-      - name: Install pyarrow (for fill comparison)
-        run: python -m pip install pyarrow
 
       - name: Compare C++ vs Python fills
         run: scripts/compare_cpp_python_fills.sh
