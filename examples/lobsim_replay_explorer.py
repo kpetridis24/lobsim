@@ -756,10 +756,11 @@ def main() -> None:
 
         st.markdown('<div class="section-title">Strategy Orders</div>', unsafe_allow_html=True)
         orders_view = st.radio(
-            "Show",
+            "",
             ["Active", "Closed", "All"],
             horizontal=True,
             key="strategy_orders_view",
+            label_visibility="collapsed",
         )
         book_id = st.session_state.book_id
         if book_id is None:
