@@ -20,6 +20,7 @@ lobsim/types.pyi
 lobsim.egg-info/PKG-INFO
 lobsim.egg-info/SOURCES.txt
 lobsim.egg-info/dependency_links.txt
+lobsim.egg-info/entry_points.txt
 lobsim.egg-info/top_level.txt
 lobsim/_core/__init__.pyi
 lobsim/_core/types.pyi
