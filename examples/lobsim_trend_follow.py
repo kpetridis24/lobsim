@@ -810,7 +810,7 @@ def init_engine(path: Path, tick_size: float, lot_size: float, batch_size: int, 
     snap_path = find_snapshot_path(path)
     if snap_path is not None:
         sides, prices, quantities, order_ids, trader_ids, dupes = load_l3_snapshot(
-            snap_path, tick_size=tick_size, lot_size=lot_size, batch_size=batch_size
+            snap_path, tick_size=tick_size, lot_size=lot_size, batch_size=batch_size, symbol_id=symbol
         )
         if sides:
             engine.init_from_l3_snapshot(sides, prices, quantities, order_ids, trader_ids)

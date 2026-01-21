@@ -8,15 +8,15 @@
 
 /**
  * TODO:
- * - For now, if a strategy wants to execute a market order, it should do it with an ADD call at
- *    the appropriate price level. Maybe make it easier for the client to insert MARKET orders
- *    by providing a new API to be used by the aggressor - AGGRESSIVE_MATCH.
  * - Add checks for out-of-limits values -> reject event completely.
  * - L2 init cannot support exact paper order trading because we reject MODIFYs with orderIds not present.
  * - If a SET with non-existing order ID arrives, it is rejected now. Future work: track invalid events,
  *    and try to reconcile them later. For example if an ADD arrives later with a TS earlier than the SET
  *    that was rejected, it means that the ADD should have happend first (feed delays), so we must reconcile
  *    and maybe adjust the order book
+ * - Implement logic for 'orphan' orders where for example a SUB for unknown orderId arrives and the ADD arrives later.
+ *   These orders must be reconciled with a delay. Also devise the reconciliation mechanism -> AI agent with context
+ *   might make this simpler.
  */
 
 void PaperTradingSimulator::update(const NormalizedLobEvent& event) {

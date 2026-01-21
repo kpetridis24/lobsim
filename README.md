@@ -9,7 +9,7 @@
 
 `lobsim` is a fast, deterministic **L3 limit order book replay + paper execution simulator** for market microstructure research and strategy prototyping.
 
-It consumes an event stream (historical and/or strategy-injected), maintains a **per-order (L3)** book state, and emits facts (fills + diagnostics) via a pluggable sink interface.
+It consumes an event stream (historical and/or strategy-injected), maintains a **strict per-order (L3)** book state (requires stable `orderId`s for historical events), and emits facts (fills + diagnostics) via a pluggable sink interface.
 The core is written in **C++20** for performance, with **Python bindings** for research workflows.
 
 ## Why use it
@@ -28,6 +28,82 @@ The core is written in **C++20** for performance, with **Python bindings** for r
 - **`ReplaySession`**: helper to step events and optionally enforce monotonic `tsReceived` during replay.
 - **`ILogSink` / `InMemoryLogSink`**: structured observability for research and debugging.
 - **`FillRecord` / `EventApplyRecord` / `DiagnosticRecord`**: the emitted facts: fills, applied events, and warnings/errors with event context.
+
+## Event stream requirements (L3) + handling missing / NaN order IDs
+
+`lobsim` is an **L3 (per-order)** simulator. That means the engine assumes that **every historical order update refers to a concrete order object** via a stable `orderId`.
+
+### ✅ L3 assumption (default)
+For historical events, the engine expects:
+
+- `orderId` is present and stable for the lifetime of the order
+- `ADD(orderId)` is unique (no duplicate `ADD` for the same live order)
+- `SET / SUBTRACT / DELETE / MATCH` refer to an existing `orderId`
+- FIFO queueing at a price level is preserved using order arrival order
+
+If your feed satisfies this, you get full L3 behavior: queue priority, maker/taker attribution, and order lifecycle tracking.
+
+---
+
+### ⚠️ Missing / NaN order IDs (L2-style feeds)
+Some event streams provide **no order IDs** (e.g., `orderId = NaN/null`), or provide them only partially. In these cases, the feed is effectively **L2 (price-level)**, and it is **not possible** to reconstruct true FIFO queue priority.
+
+`lobsim` intentionally does **not** guess semantics inside the engine.
+Instead, **the data source / adapter must normalize** such feeds into valid L3-like events.
+
+#### Recommended normalization for missing order IDs (treat as L2)
+If a **substantial majority** of events have missing IDs, treat the stream as **pure L2**:
+
+1) **Ignore all order IDs from the feed** (treat them as missing)
+2) Maintain a level state: `level_qty[(symbol, side, priceTicks)] -> qtyLots`
+3) Emit a deterministic synthetic `orderId` per price level:
+
+```python
+levelId = f(symbol, side, priceTicks) # must be collision-safe
+```
+
+
+4) Convert incoming updates into `ADD/SET/DELETE` on the synthetic levelId:
+
+- First time a level appears with qty > 0:
+  - emit `ADD(levelId, priceTicks, qtyLots)`
+- If the level already exists:
+  - emit `SET(levelId, priceTicks, newQtyLots)`  
+- If `newQtyLots == 0`:
+  - emit `DELETE(levelId, priceTicks, 0)`
+
+This produces stable and realistic **top-of-book + depth evolution** while keeping the engine API unchanged.
+
+> Important: This mode preserves **L2 depth correctness**, but it does **not** represent true L3 queue position within a level (because the feed does not contain it).
+
+---
+
+### Mixed feeds (some real order IDs, some missing IDs)
+If your feed contains both:
+- real per-order updates (true L3 IDs), and
+- occasional NaN/missing IDs at the same price levels,
+
+you have two valid choices:
+
+**(A) Strict L3 integrity (recommended for correctness):**  
+Drop/diagnose NaN updates, and replay only true L3 events.
+
+**(B) Hybrid (recommended for best book continuity):**  
+Treat NaN updates as L2 and apply them to synthetic `levelId` orders, *separate from real L3 orders*.  
+Make sure the synthetic ID namespace **cannot collide** with real order IDs.
+
+---
+
+### Why this is handled in the source (not the engine)
+A missing `orderId` does not have a single universal meaning. Depending on the venue/data vendor, it can represent:
+- L2 price-level deltas
+- aggregated snapshots
+- feed corruption / partial packet loss
+- numeric precision loss (e.g., large IDs stored as floating point)
+
+Because the correct interpretation depends on the feed, `lobsim` keeps the core engine **strict and deterministic**, and delegates normalization to adapters/sources.
+
+
 
 ## Installation / prerequisites (developer build)
 This repo is built with CMake and ships Python bindings via `pybind11`.

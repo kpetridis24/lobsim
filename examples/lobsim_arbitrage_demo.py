@@ -287,18 +287,27 @@ def init_simulator(*, batch_size: int, require_monotonic: bool, fail_fast: bool)
     sink = InMemoryMultiLogSink()
     sim.set_multi_log_sink(sink)
     st.session_state.time_offsets = {}
+    starters: list[tuple[BookSpec, ParquetStream, Adapter, object]] = []
 
     for spec in BOOK_SPECS:
         book_id = spec.book_id
         sim.add_book(book_id)
 
         snap_path = find_snapshot_path(Path(spec.data_path))
+        snapshot_levels = None
         if snap_path is not None:
+            allow_missing = spec.book_key == "binance:BTC-USDT"
             sides, prices, quantities, order_ids, trader_ids, dupes = load_l3_snapshot(
-                snap_path, tick_size=spec.tick_size, lot_size=spec.lot_size, batch_size=4096
+                snap_path,
+                tick_size=spec.tick_size,
+                lot_size=spec.lot_size,
+                batch_size=4096,
+                symbol_id=spec.book_key,
+                allow_missing_ids=allow_missing,
             )
             if sides:
                 sim.init_from_l3_snapshot(book_id, sides, prices, quantities, order_ids, trader_ids)
+                snapshot_levels = (sides, prices, quantities)
                 msg = f"Loaded snapshot {snap_path.name} ({len(sides)} orders"
                 if dupes:
                     msg += f", skipped {dupes} dupes"
@@ -310,23 +319,44 @@ def init_simulator(*, batch_size: int, require_monotonic: bool, fail_fast: bool)
             st.warning(f"Snapshot not found for {spec.label}; starting empty.")
 
         source = ParquetStream(spec.data_path, batch_size=batch_size)
-        adapter = Adapter(tick_size=spec.tick_size, lot_size=spec.lot_size, symbol_id=spec.book_key)
+        adapter = Adapter(
+            tick_size=spec.tick_size,
+            lot_size=spec.lot_size,
+            symbol_id=spec.book_key,
+            l2_missing_ids=spec.book_key == "binance:BTC-USDT",
+        )
+        if snapshot_levels is not None and spec.book_key == "binance:BTC-USDT":
+            adapter.seed_l2_levels(*snapshot_levels)
 
         try:
             first_raw = next(source)
         except StopIteration:
             st.warning(f"No events found in {spec.data_path}")
             continue
+        starters.append((spec, source, adapter, first_raw))
 
-        offset_received = first_raw.ts_received_us
-        offset_exchange = first_raw.ts_exchange_us
-        st.session_state.time_offsets[spec.book_key] = offset_received
+    if not starters:
+        st.warning("No streams could be initialized.")
+    else:
+        # Align all streams to the Binance BTC-USDT start time for a clean demo timeline.
+        ref_raw = next((raw for spec, _, _, raw in starters if spec.book_key == "binance:BTC-USDT"), None)
+        if ref_raw is None:
+            ref_raw = min((raw for _, _, _, raw in starters), key=lambda r: r.ts_received_us)
 
-        buffered = _BufferedRawStream(first_raw, source)
-        aligned_adapter = _TimeShiftAdapter(
-            adapter, offset_received=offset_received, offset_exchange=offset_exchange
-        )
-        sim.add_stream(book_id, buffered, aligned_adapter)
+        ref_ts_received = ref_raw.ts_received_us
+        ref_ts_exchange = ref_raw.ts_exchange_us
+
+        for spec, source, adapter, first_raw in starters:
+            shift_received = ref_ts_received - first_raw.ts_received_us
+            offset_received = -shift_received
+            offset_exchange = first_raw.ts_exchange_us - ref_ts_exchange
+            st.session_state.time_offsets[spec.book_key] = shift_received
+
+            buffered = _BufferedRawStream(first_raw, source)
+            aligned_adapter = _TimeShiftAdapter(
+                adapter, offset_received=offset_received, offset_exchange=offset_exchange
+            )
+            sim.add_stream(spec.book_id, buffered, aligned_adapter)
 
     st.session_state.sim = sim
     st.session_state.sink = sink
