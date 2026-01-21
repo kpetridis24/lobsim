@@ -7,6 +7,17 @@
 [![CI](https://github.com/kpetridis24/lobsim/actions/workflows/ci.yml/badge.svg)](https://github.com/kpetridis24/lobsim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+## Table of contents
+- [Why use it](#why-use-it)
+- [Core concepts](#core-concepts)
+- [Event stream requirements (L3) + handling missing / NaN order IDs](#event-stream-requirements-l3--handling-missing--nan-order-ids)
+- [Installation / prerequisites (developer build)](#installation--prerequisites-developer-build)
+- [Quickstart](#quickstart)
+- [Examples](#examples)
+- [Benchmarks](#benchmarks)
+- [Repository layout](#repository-layout)
+- [License](#license)
+
 `lobsim` is a fast, deterministic **L3 limit order book replay + paper execution simulator** for market microstructure research and strategy prototyping.
 
 It consumes an event stream (historical and/or strategy-injected), maintains a **strict per-order (L3)** book state (requires stable `orderId`s for historical events), and emits facts (fills + diagnostics) via a pluggable sink interface.
