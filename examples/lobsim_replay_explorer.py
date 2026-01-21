@@ -246,7 +246,11 @@ def init_simulator(
     if snap_path is not None:
         try:
             sides, prices, quantities, order_ids, trader_ids, dupes = load_l3_snapshot(
-                snap_path, tick_size=tick_size, lot_size=lot_size, batch_size=batch_size
+                snap_path,
+                tick_size=tick_size,
+                lot_size=lot_size,
+                batch_size=batch_size,
+                symbol_id=book_id.book_key,
             )
             if sides:
                 sim.init_from_l3_snapshot(book_id, sides, prices, quantities, order_ids, trader_ids)

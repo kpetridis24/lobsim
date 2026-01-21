@@ -29,7 +29,7 @@ def parse_update_type(value: str) -> UpdateType:
         return UpdateType.DELETE
     if s == "MATCH":
         return UpdateType.MATCH
-    if s == "SUBTRACT":
+    if s in ("SUBTRACT", "SUB"):
         return UpdateType.SUBTRACT
     if s == "SET":
         return UpdateType.SET
@@ -76,6 +76,17 @@ def stable_int64(value: str) -> int:
     if v >= 2**63:
         v -= 2**64
     return v
+
+
+def _is_missing_order_id(value) -> bool:
+    if value is None:
+        return True
+    s = str(value).strip()
+    return s == "" or s.lower() in ("none", "nan")
+
+
+def level_order_id(symbol_id: str, side: Side, price_ticks: int) -> int:
+    return stable_int64(f"LEVEL:{symbol_id}:{side.name}:{price_ticks}")
 
 
 @dataclass
@@ -144,24 +155,125 @@ class ParquetStream:
 
 
 class Adapter:
-    def __init__(self, *, tick_size: float, lot_size: float, symbol_id: str):
+    def __init__(
+        self,
+        *,
+        tick_size: float,
+        lot_size: float,
+        symbol_id: str,
+        l2_missing_ids: bool = False,
+    ):
         self.tick_size = tick_size
         self.lot_size = lot_size
         self.symbol_id = symbol_id
+        self._l2_levels: dict[tuple[Side, int], int] = {}
+        self._l2_missing_ids = l2_missing_ids
+
+    def seed_l2_levels(
+        self, sides: Iterable[Side], prices: Iterable[int], quantities: Iterable[int]
+    ) -> None:
+        if not self._l2_missing_ids:
+            return
+        self._l2_levels.clear()
+        for side, price, qty in zip(sides, prices, quantities):
+            if qty <= 0:
+                continue
+            self._l2_levels[(side, price)] = qty
+
+    def _normalize_l2(
+        self,
+        *,
+        raw: RawEvent,
+        update_type: UpdateType,
+        side: Side,
+        price_ticks: int,
+        qty_lots: int,
+    ) -> NormalizedLobEvent:
+        key = (side, price_ticks)
+        prev_qty = self._l2_levels.get(key, 0)
+        new_qty = prev_qty
+        if update_type == UpdateType.ADD:
+            new_qty = prev_qty + qty_lots
+        elif update_type in (
+            UpdateType.SUBTRACT,
+            UpdateType.MATCH,
+            UpdateType.AGGRESSIVE_TRADE,
+        ):
+            new_qty = prev_qty - qty_lots
+        elif update_type == UpdateType.DELETE:
+            new_qty = 0
+        elif update_type == UpdateType.SET:
+            new_qty = qty_lots
+        if new_qty < 0:
+            new_qty = 0
+
+        if new_qty > 0:
+            self._l2_levels[key] = new_qty
+        else:
+            self._l2_levels.pop(key, None)
+
+        if prev_qty == 0 and new_qty == 0:
+            out_type = UpdateType.ADD
+            out_qty = 0
+        elif new_qty == 0:
+            out_type = UpdateType.DELETE
+            out_qty = 0
+        elif prev_qty == 0:
+            out_type = UpdateType.ADD
+            out_qty = new_qty
+        else:
+            out_type = UpdateType.SET
+            out_qty = new_qty
+
+        return NormalizedLobEvent(
+            tsExchange=raw.ts_exchange_us,
+            tsReceived=raw.ts_received_us,
+            side=side,
+            updateType=out_type,
+            priceTicks=price_ticks,
+            quantityLots=out_qty,
+            orderId=level_order_id(self.symbol_id, side, price_ticks),
+            traderId=UnknownTraderIdSentinel,
+            aggressorId=UnknownAggressorIdSentinel,
+            symbolId=self.symbol_id,
+            updateSource=UpdateSource.HISTORICAL,
+        )
 
     def normalize(self, raw: RawEvent) -> NormalizedLobEvent:
         if raw.ts_exchange_us < 0 or raw.ts_received_us < 0:
             raise ValueError("negative timestamp")
         if raw.entry_px < 0 or raw.entry_sx < 0:
             raise ValueError("negative price/size")
-        if not raw.order_id:
-            raise ValueError("empty order_id")
-
         update_type = parse_update_type(raw.update_type)
         side = Side.BUY if raw.is_buy else Side.SELL
         price_ticks = to_ticks(raw.entry_px, self.tick_size, strict=True)
         qty_lots = to_ticks(raw.entry_sx, self.lot_size, strict=True)
-        order_id = stable_int64(raw.order_id)
+        order_id_raw = raw.order_id
+        if _is_missing_order_id(order_id_raw):
+            if not self._l2_missing_ids:
+                order_id = stable_int64(str(order_id_raw))
+                return NormalizedLobEvent(
+                    tsExchange=raw.ts_exchange_us,
+                    tsReceived=raw.ts_received_us,
+                    side=side,
+                    updateType=update_type,
+                    priceTicks=price_ticks,
+                    quantityLots=qty_lots,
+                    orderId=order_id,
+                    traderId=UnknownTraderIdSentinel,
+                    aggressorId=UnknownAggressorIdSentinel,
+                    symbolId=self.symbol_id,
+                    updateSource=UpdateSource.HISTORICAL,
+                )
+            return self._normalize_l2(
+                raw=raw,
+                update_type=update_type,
+                side=side,
+                price_ticks=price_ticks,
+                qty_lots=qty_lots,
+            )
+
+        order_id = stable_int64(str(order_id_raw))
 
         return NormalizedLobEvent(
             tsExchange=raw.ts_exchange_us,
@@ -188,7 +300,13 @@ def find_snapshot_path(data_path: Path) -> Path | None:
 
 
 def load_l3_snapshot(
-    path: Path, *, tick_size: float, lot_size: float, batch_size: int = 4096
+    path: Path,
+    *,
+    tick_size: float,
+    lot_size: float,
+    batch_size: int = 4096,
+    symbol_id: str | None = None,
+    allow_missing_ids: bool = False,
 ):
     cols = ["update_type", "is_buy", "entry_px", "entry_sx", "order_id"]
     pf = pq.ParquetFile(str(path))
@@ -203,6 +321,7 @@ def load_l3_snapshot(
     trader_ids: list[int] = []
     duplicate = 0
     seen_orders: set[int] = set()
+    level_qty: dict[tuple[Side, int], int] = {}
 
     for batch in pf.iter_batches(columns=cols, batch_size=batch_size):
         bcols = {name: batch.column(i) for i, name in enumerate(cols)}
@@ -212,8 +331,13 @@ def load_l3_snapshot(
                 float(bcols["entry_px"][i].as_py()), tick_size, strict=True
             )
             qty = to_ticks(float(bcols["entry_sx"][i].as_py()), lot_size, strict=True)
-            order_id_str = str(bcols["order_id"][i].as_py())
-            order_id = stable_int64(order_id_str)
+            order_id_raw = bcols["order_id"][i].as_py()
+            if _is_missing_order_id(order_id_raw):
+                if allow_missing_ids:
+                    level_qty[(side, price)] = level_qty.get((side, price), 0) + qty
+                    continue
+                order_id_raw = str(order_id_raw)
+            order_id = stable_int64(str(order_id_raw))
             if order_id in seen_orders:
                 duplicate += 1
                 continue
@@ -222,5 +346,14 @@ def load_l3_snapshot(
             prices.append(price)
             quantities.append(qty)
             order_ids.append(order_id)
+            trader_ids.append(UnknownTraderIdSentinel)
+    if allow_missing_ids:
+        for (side, price), qty in level_qty.items():
+            if qty <= 0:
+                continue
+            sides.append(side)
+            prices.append(price)
+            quantities.append(qty)
+            order_ids.append(level_order_id(symbol_id or "", side, price))
             trader_ids.append(UnknownTraderIdSentinel)
     return sides, prices, quantities, order_ids, trader_ids, duplicate

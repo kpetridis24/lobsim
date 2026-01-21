@@ -35,6 +35,7 @@ def _resolve_demo_script(name: str) -> Path:
     mapping = {
         "replay": "lobsim_replay_explorer.py",
         "trend": "lobsim_trend_follow.py",
+        "arb": "lobsim_arbitrage_demo.py",
     }
     if name not in mapping:
         raise ValueError(
@@ -58,7 +59,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     demo = sub.add_parser("demo", help="Run a Streamlit demo")
-    demo.add_argument("name", choices=["replay", "trend"], help="Demo name")
+    demo.add_argument("name", choices=["replay", "trend", "arb"], help="Demo name")
     return parser
 
 
