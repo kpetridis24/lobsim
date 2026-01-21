@@ -64,11 +64,13 @@ python -m pip install streamlit plotly pyarrow
 
 lobsim demo replay   # replay explorer
 lobsim demo trend    # trend-following baseline
+lobsim demo arb      # multi-book arbitrage monitor
 ```
 
 If your shell can’t find the `lobsim` command, run the same via:
 ```bash
 python -m lobsim.cli demo replay
+python -m lobsim.cli demo arb
 ```
 
 ### BTC/USDT parquet replay (C++)

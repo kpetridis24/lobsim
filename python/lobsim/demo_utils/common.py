@@ -29,7 +29,7 @@ def parse_update_type(value: str) -> UpdateType:
         return UpdateType.DELETE
     if s == "MATCH":
         return UpdateType.MATCH
-    if s == "SUBTRACT":
+    if s in ("SUBTRACT", "SUB"):
         return UpdateType.SUBTRACT
     if s == "SET":
         return UpdateType.SET
@@ -154,14 +154,23 @@ class Adapter:
             raise ValueError("negative timestamp")
         if raw.entry_px < 0 or raw.entry_sx < 0:
             raise ValueError("negative price/size")
-        if not raw.order_id:
-            raise ValueError("empty order_id")
-
         update_type = parse_update_type(raw.update_type)
         side = Side.BUY if raw.is_buy else Side.SELL
         price_ticks = to_ticks(raw.entry_px, self.tick_size, strict=True)
         qty_lots = to_ticks(raw.entry_sx, self.lot_size, strict=True)
-        order_id = stable_int64(raw.order_id)
+        order_id_raw = raw.order_id
+        if order_id_raw is None or str(order_id_raw).strip() in (
+            "",
+            "None",
+            "nan",
+            "NaN",
+        ):
+            # L2-style streams may omit order_id; fall back to a per-level synthetic id.
+            order_id = stable_int64(f"{side.name}:{price_ticks}")
+            if update_type == UpdateType.ADD:
+                update_type = UpdateType.SET
+        else:
+            order_id = stable_int64(str(order_id_raw))
 
         return NormalizedLobEvent(
             tsExchange=raw.ts_exchange_us,
