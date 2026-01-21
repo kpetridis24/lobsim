@@ -156,7 +156,12 @@ class ParquetStream:
 
 class Adapter:
     def __init__(
-        self, *, tick_size: float, lot_size: float, symbol_id: str, l2_missing_ids: bool = False
+        self,
+        *,
+        tick_size: float,
+        lot_size: float,
+        symbol_id: str,
+        l2_missing_ids: bool = False,
     ):
         self.tick_size = tick_size
         self.lot_size = lot_size
@@ -164,7 +169,9 @@ class Adapter:
         self._l2_levels: dict[tuple[Side, int], int] = {}
         self._l2_missing_ids = l2_missing_ids
 
-    def seed_l2_levels(self, sides: Iterable[Side], prices: Iterable[int], quantities: Iterable[int]) -> None:
+    def seed_l2_levels(
+        self, sides: Iterable[Side], prices: Iterable[int], quantities: Iterable[int]
+    ) -> None:
         if not self._l2_missing_ids:
             return
         self._l2_levels.clear()
@@ -187,7 +194,11 @@ class Adapter:
         new_qty = prev_qty
         if update_type == UpdateType.ADD:
             new_qty = prev_qty + qty_lots
-        elif update_type in (UpdateType.SUBTRACT, UpdateType.MATCH, UpdateType.AGGRESSIVE_TRADE):
+        elif update_type in (
+            UpdateType.SUBTRACT,
+            UpdateType.MATCH,
+            UpdateType.AGGRESSIVE_TRADE,
+        ):
             new_qty = prev_qty - qty_lots
         elif update_type == UpdateType.DELETE:
             new_qty = 0
