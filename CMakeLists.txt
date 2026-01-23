@@ -111,6 +111,7 @@ if(LOBSIM_BUILD_TESTS)
     cpp/tests/test_paper_trading_simulator.cpp
     cpp/tests/test_in_memory_sink.cpp
     cpp/tests/test_multibook_simulator.cpp
+    cpp/tests/test_public_api.cpp
   )
   target_link_libraries(lobsim_core_tests PRIVATE lobsim::core Catch2::Catch2WithMain)
 

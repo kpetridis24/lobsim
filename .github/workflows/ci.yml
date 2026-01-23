@@ -110,6 +110,9 @@ jobs:
       - name: Smoke import
         run: python -c "import lobsim; import lobsim._core; print('lobsim import OK')"
 
+      - name: Python API tests
+        run: python -m unittest discover -s python/tests -v
+
 
       - name: Compare C++ vs Python fills
         run: scripts/compare_cpp_python_fills.sh
