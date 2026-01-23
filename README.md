@@ -31,14 +31,167 @@ The core is written in **C++20** for performance, with **Python bindings** for r
 - **Measure execution**: fills include maker/taker metadata and timestamps, so you can evaluate queueing and fill quality.
 - **Lightning fast**: the core is C++20; Python bindings keep research workflows responsive even on large event streams.
 - **Built-in observability**: structured fills, event-application records, and diagnostics make it easy to debug, audit, and understand your event stream.
-- **Roadmap**: multi-book replay + monitoring primitives for cross-venue analysis (e.g., arbitrage/hedging research) is a planned extension.
 
 ## Core concepts
-- **`PaperTradingSimulator`**: the main engine. Call `update(NormalizedLobEvent)` and query the book (`getBestPriceTicks`, `depthAt`, `l2TopN`).
-- **`NormalizedLobEvent`**: the canonical event schema (`ADD`, `DELETE`, `SUBTRACT`, `MATCH`, `SET`) plus metadata (`UpdateSource::{HISTORICAL,STRATEGY}`).
-- **`ReplaySession`**: helper to step events and optionally enforce monotonic `tsReceived` during replay.
-- **`ILogSink` / `InMemoryLogSink`**: structured observability for research and debugging.
-- **`FillRecord` / `EventApplyRecord` / `DiagnosticRecord`**: the emitted facts: fills, applied events, and warnings/errors with event context.
+
+### `PaperTradingSimulator` (single-book engine)
+`PaperTradingSimulator` is the core state machine for **one** order book. You feed it `NormalizedLobEvent`s via `update(...)`, and query the book state at any time.
+
+Minimal usage (Python):
+```python
+from lobsim.engine import PaperTradingSimulator
+from lobsim.sink import InMemoryLogSink
+
+engine = PaperTradingSimulator()
+sink = InMemoryLogSink()
+engine.set_log_sink(sink)  # enables fills + diagnostics + event-apply records
+```
+
+Query examples:
+```python
+from lobsim.types import Side
+
+best_bid = engine.get_best_price_ticks(Side.BUY)
+best_ask = engine.get_best_price_ticks(Side.SELL)
+top10_bids = engine.l2_top_n(Side.BUY, 10)  # [(priceTicks, qtyLots), ...]
+```
+
+### `NormalizedLobEvent` (canonical event schema)
+`NormalizedLobEvent` is the “input language” of the engine.
+
+Important fields / conventions:
+- `tsReceived`, `tsExchange`: integer timestamps in **microseconds** (you decide the epoch; just stay consistent).
+- `priceTicks`, `quantityLots`: integers on a fixed grid (defined by your `tick_size` / `lot_size` in the adapter).
+- `orderId`: stable identifier for a **single** historical L3 order (or a synthetic per-level ID if you intentionally normalize an L2 feed).
+- `symbolId`: book identifier (used by `MultiBookSimulator`; for single-book it can be any string).
+- `updateSource`: whether the event is `HISTORICAL` (market feed) or `STRATEGY` (your paper/strategy actions).
+
+Minimal construction (Python):
+```python
+from lobsim.lob_event import NormalizedLobEvent
+from lobsim.types import Side, UpdateSource, UpdateType, UnknownAggressorIdSentinel, UnknownTraderIdSentinel
+
+ev = NormalizedLobEvent(
+    tsExchange=0,
+    tsReceived=123_456,
+    side=Side.BUY,
+    updateType=UpdateType.ADD,
+    priceTicks=9_355_000,
+    quantityLots=100_000,
+    orderId=1,
+    traderId=UnknownTraderIdSentinel,
+    aggressorId=UnknownAggressorIdSentinel,
+    updateSource=UpdateSource.HISTORICAL,
+    symbolId="coinbase:BTC-USDT",
+)
+engine.update(ev)
+```
+
+### What each `UpdateType` means (and when to use it)
+`lobsim` is fundamentally **L3** (per-order). The engine assumes that historical updates refer to an existing order object via `orderId` (unless you intentionally normalize an L2 feed into synthetic per-level “orders”).
+
+#### `ADD`
+Creates a new order with a unique `orderId` and initial `quantityLots` at `priceTicks`.
+- **Historical `ADD`**: represents a new resting market order.
+- **Strategy `ADD`**: represents a paper limit order. If the price is marketable, it will generate immediate taker fills; any remaining quantity becomes a resting **paper** order (it does not alter historical liquidity).
+
+#### `DELETE`
+Cancels an existing order (`orderId`) by setting its remaining quantity to zero.
+- Use this for full cancels. (`quantityLots` is typically `0`.)
+
+#### `SUBTRACT`
+Reduces the remaining quantity of an existing order (`orderId`) by `quantityLots`.
+- Use for partial cancels / partial reductions.
+- `quantityLots < 0` is invalid.
+
+#### `SET`
+Overwrites the remaining quantity of an existing order (`orderId`) to `quantityLots`.
+- Use this if your feed explicitly encodes “set remaining size to X”.
+- This is also the typical normalization target when you treat a missing-ID feed as L2 and maintain “total level size”.
+
+#### `MATCH`
+Represents a trade that removes liquidity from a **passive** existing order (`orderId`) by `quantityLots`.
+- Use this for feeds that emit passive-side trade events directly (instead of encoding trades as marketable `ADD`s).
+
+#### `AGGRESSIVE_TRADE` (strategy-only)
+A strategy “market-style” order that consumes the current opposite book immediately (no need to know the exact crossing price).
+- It does **not** rest any remainder.
+- The historical book is not mutated; fills are emitted as if you traded against that liquidity.
+- In the current implementation, `priceTicks` is treated as metadata (the engine uses the current best levels).
+
+### Observability: `ILogSink` / `InMemoryLogSink`
+Sinks receive the facts emitted by the engine:
+- `FillRecord`: executed trades (maker/taker, qty/price, timestamps, sources).
+- `EventApplyRecord`: what the engine attempted to apply (useful for audit + debugging).
+- `DiagnosticRecord`: structured warnings/errors with event context (e.g., “DELETE non-existing orderId”).
+
+Attach a sink (Python):
+```python
+from lobsim.engine import PaperTradingSimulator
+from lobsim.sink import InMemoryLogSink
+
+engine = PaperTradingSimulator()
+sink = InMemoryLogSink()
+engine.set_log_sink(sink)
+
+fills = sink.get_fills()
+events = sink.get_events()
+diagnostics = sink.get_diagnostics()
+```
+
+### Multi-book: `BookId`, `MultiBookSimulator`, `InMemoryMultiLogSink`
+`MultiBookSimulator` composes many `PaperTradingSimulator` instances and:
+- merges the next event across all registered streams by `tsReceived` (no look-ahead),
+- maintains a single “current time”,
+- lets you inject strategy events per book with optional latency.
+
+Minimal usage (Python):
+```python
+from lobsim import BookId
+from lobsim.multibook import Config, MultiBookSimulator
+from lobsim.sink import InMemoryMultiLogSink
+
+cfg = Config(require_monotonic_ts_received=True, fail_fast=True)
+sim = MultiBookSimulator(cfg)
+
+book = BookId("coinbase", "BTC-USDT")
+sim.add_book(book)
+
+sink = InMemoryMultiLogSink()
+sim.set_multi_log_sink(sink)
+```
+
+Register a stream:
+- `add_stream(book_id, source, adapter)`: `source` is any Python iterator; `adapter.normalize(raw)` must return a `NormalizedLobEvent`.
+- `add_stream(book_id, normalized_source, adapter=None)`: if the source already yields `NormalizedLobEvent`s.
+
+Step and inject strategy events:
+```python
+while sim.step():
+    pass
+
+# Inject a market-style strategy order (example)
+from lobsim.lob_event import NormalizedLobEvent
+from lobsim.types import Side, UpdateType, UpdateSource, UnknownAggressorIdSentinel, UnknownTraderIdSentinel
+
+sim.submit_strategy_event(
+    book,
+    NormalizedLobEvent(
+        tsExchange=0,
+        tsReceived=0,  # 0 means “relative to current time” in MultiBookSimulator
+        side=Side.BUY,
+        updateType=UpdateType.AGGRESSIVE_TRADE,
+        priceTicks=0,
+        quantityLots=100_000,
+        orderId=123,
+        traderId=UnknownTraderIdSentinel,
+        aggressorId=UnknownAggressorIdSentinel,
+        updateSource=UpdateSource.STRATEGY,
+        symbolId="",  # will be filled to the bookKey
+    ),
+    latency=1_000,  # microseconds
+)
+```
 
 ## Event stream requirements (L3) + handling missing / NaN order IDs
 
@@ -157,12 +310,16 @@ lobsim demo arb      # multi-book arbitrage monitor
 If your shell can’t find the `lobsim` command, run the same via:
 ```bash
 python -m lobsim.cli demo replay
+python -m lobsim.cli demo trend
 python -m lobsim.cli demo arb
+python -m lobsim.cli example cpp
+python -m lobsim.cli bench
 ```
 
-### BTC/USDT parquet replay (C++)
+### Example runners
 ```bash
-./scripts/run_cpp_example.sh sample_data/coinbase_btcusdt_sample.parquet
+lobsim example cpp
+lobsim example py
 ```
 
 ### LOBSTER AMZN message+orderbook replay (Python)
@@ -172,12 +329,6 @@ PYTHONPATH=python python examples/lobsim_lobster_py.py \
   sample_data/AMZN_2012-06-21_34200000_57600000_orderbook_10.csv
 ```
 
-### Compare fills: C++ vs Python (same dataset)
-Runs both implementations and diffs the full fill stream (all fields).
-```bash
-./scripts/compare_cpp_python_fills.sh sample_data/coinbase_btcusdt_sample.parquet
-```
-
 ## Benchmarks
 Two benchmark entry points are provided:
 - `benchmark/lobsim_bench_cpp.cpp` (C++)
@@ -185,7 +336,7 @@ Two benchmark entry points are provided:
 
 Run both:
 ```bash
-./scripts/run_benchmarks.sh sample_data/coinbase_btcusdt_sample.parquet
+lobsim bench
 ```
 
 Notes:
