@@ -33,50 +33,51 @@ struct Rational {
 struct InstrumentSpec {
     std::string symbol;
     std::string venue;
-    Rational tickSize;
-    Rational lotSize;
+    Rational tick_size;
+    Rational lot_size;
 
-    RoundingPolicy pricePolicy{RoundingPolicy::Strict};
-    RoundingPolicy qtyPolicy{RoundingPolicy::Strict};
+    RoundingPolicy price_policy{RoundingPolicy::Strict};
+    RoundingPolicy qty_policy{RoundingPolicy::Strict};
 
-    long double strictEps{1e-12L};
+    long double strict_eps{1e-12L};
 
-    bool isValid() const noexcept { return tickSize.valid() && lotSize.valid(); }
+    bool is_valid() const noexcept { return tick_size.valid() && lot_size.valid(); }
 
-    ConvertResult<std::int64_t> priceToTicks(long double price) const {
-        if (!isValid()) {
+    ConvertResult<std::int64_t> price_to_ticks(long double price) const {
+        if (!is_valid()) {
             return ConvertResult<std::int64_t>::failure("InstrumentSpec invalid tick/lot.");
         }
         if (!(price >= 0)) {
             return ConvertResult<std::int64_t>::failure("Negative price.");
         }
-        const long double x = price * (static_cast<long double>(tickSize.den) / static_cast<long double>(tickSize.num));
-        return roundToInt64(x, pricePolicy, "price");
+        const long double x =
+            price * (static_cast<long double>(tick_size.den) / static_cast<long double>(tick_size.num));
+        return round_to_int64(x, price_policy, "price");
     }
 
-    ConvertResult<std::int64_t> quantityToLots(long double qty) const {
-        if (!isValid()) {
+    ConvertResult<std::int64_t> quantity_to_lots(long double qty) const {
+        if (!is_valid()) {
             return ConvertResult<std::int64_t>::failure("InstrumentSpec invalid tick/lot.");
         }
         if (!(qty >= 0)) {
             return ConvertResult<std::int64_t>::failure("Negative qty.");
         }
-        const long double x = qty * (static_cast<long double>(lotSize.den) / static_cast<long double>(lotSize.num));
-        return roundToInt64(x, qtyPolicy, "qty");
+        const long double x = qty * (static_cast<long double>(lot_size.den) / static_cast<long double>(lot_size.num));
+        return round_to_int64(x, qty_policy, "qty");
     }
 
-    long double ticksToPrice(std::int64_t ticks) const {
+    long double ticks_to_price(std::int64_t ticks) const {
         return static_cast<long double>(ticks) *
-               (static_cast<long double>(tickSize.num) / static_cast<long double>(tickSize.den));
+               (static_cast<long double>(tick_size.num) / static_cast<long double>(tick_size.den));
     }
 
-    long double lotsToQuantity(std::int64_t lots) const {
+    long double lots_to_quantity(std::int64_t lots) const {
         return static_cast<long double>(lots) *
-               (static_cast<long double>(lotSize.num) / static_cast<long double>(lotSize.den));
+               (static_cast<long double>(lot_size.num) / static_cast<long double>(lot_size.den));
     }
 
 private:
-    ConvertResult<std::int64_t> roundToInt64(long double x, RoundingPolicy pol, const char* what) const {
+    ConvertResult<std::int64_t> round_to_int64(long double x, RoundingPolicy pol, const char* what) const {
         if (!std::isfinite(static_cast<double>(x))) {
             return ConvertResult<std::int64_t>::failure(std::string("Non-finite ") + what + " conversion.");
         }
@@ -94,7 +95,7 @@ private:
             break;
         case RoundingPolicy::Strict: {
             const long double r = std::llround(x);
-            if (std::fabsl(x - r) > strictEps) {
+            if (std::fabsl(x - r) > strict_eps) {
                 return ConvertResult<std::int64_t>::failure(std::string("Strict ") + what + " not on grid.");
             }
             y = r;

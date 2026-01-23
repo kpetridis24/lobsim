@@ -57,8 +57,8 @@ class _TimeShiftAdapter:
 
     def normalize(self, raw):
         ev = self._adapter.normalize(raw)
-        ev.tsReceived = max(0, ev.tsReceived - self._offset_received)
-        ev.tsExchange = max(0, ev.tsExchange - self._offset_exchange)
+        ev.ts_received = max(0, ev.ts_received - self._offset_received)
+        ev.ts_exchange = max(0, ev.ts_exchange - self._offset_exchange)
         return ev
 
 
@@ -188,17 +188,17 @@ def _format_event_rows(events: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": ev.seq,
-                "ts_exchange": _safe_int(ev.tsExchange),
-                "ts_received": _safe_int(ev.tsReceived),
+                "ts_exchange": _safe_int(ev.ts_exchange),
+                "ts_received": _safe_int(ev.ts_received),
                 "side": ev.side.name,
-                "update_type": ev.updateType.name,
+                "update_type": ev.update_type.name,
                 "source": ev.source.name,
-                "price": _price_from_ticks(ev.bookKey, ev.priceTicks),
-                "qty": _qty_from_lots(ev.bookKey, ev.qtyLots),
-                "price_ticks": ev.priceTicks,
-                "qty_lots": ev.qtyLots,
-                "order_id": str(ev.orderId),
-                "book": ev.bookKey,
+                "price": _price_from_ticks(ev.book_key, ev.price_ticks),
+                "qty": _qty_from_lots(ev.book_key, ev.qty_lots),
+                "price_ticks": ev.price_ticks,
+                "qty_lots": ev.qty_lots,
+                "order_id": str(ev.order_id),
+                "book": ev.book_key,
             }
         )
     return rows
@@ -210,19 +210,19 @@ def _format_fill_rows(fills: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": fill.seq,
-                "ts_exchange": _safe_int(fill.tsExchange),
-                "ts_received": _safe_int(fill.tsReceived),
-                "price": _price_from_ticks(fill.bookKey, fill.priceTicks),
-                "qty": _qty_from_lots(fill.bookKey, fill.qtyLots),
-                "price_ticks": fill.priceTicks,
-                "qty_lots": fill.qtyLots,
-                "maker_side": fill.makerSide.name,
-                "maker_source": fill.makerSource.name,
-                "taker_side": fill.takerSide.name,
-                "taker_source": fill.takerSource.name,
-                "maker_order_id": str(fill.makerOrderId),
-                "taker_order_id": str(fill.takerOrderId),
-                "book": fill.bookKey,
+                "ts_exchange": _safe_int(fill.ts_exchange),
+                "ts_received": _safe_int(fill.ts_received),
+                "price": _price_from_ticks(fill.book_key, fill.price_ticks),
+                "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
+                "price_ticks": fill.price_ticks,
+                "qty_lots": fill.qty_lots,
+                "maker_side": fill.maker_side.name,
+                "maker_source": fill.maker_source.name,
+                "taker_side": fill.taker_side.name,
+                "taker_source": fill.taker_source.name,
+                "maker_order_id": str(fill.maker_order_id),
+                "taker_order_id": str(fill.taker_order_id),
+                "book": fill.book_key,
             }
         )
     return rows
@@ -244,13 +244,13 @@ def _format_diag_rows(diags: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": diag.seq,
-                "ts_exchange": _safe_int(diag.tsExchange),
-                "ts_received": _safe_int(diag.tsReceived),
+                "ts_exchange": _safe_int(diag.ts_exchange),
+                "ts_received": _safe_int(diag.ts_received),
                 "code": code_name,
                 "severity": severity_name,
                 "code_id": code_id,
                 "severity_id": severity_id,
-                "book": diag.bookKey,
+                "book": diag.book_key,
             }
         )
     return rows
@@ -422,42 +422,42 @@ def _process_new_records() -> None:
     st.session_state.fill_count = len(fills)
 
     for ev in new_events:
-        key = ev.bookKey
+        key = ev.book_key
         if key in st.session_state.book_counts:
             st.session_state.book_counts[key]["events"] += 1
 
         if ev.source != UpdateSource.HISTORICAL:
             continue
-        if ev.updateType == UpdateType.SET:
+        if ev.update_type == UpdateType.SET:
             continue
 
         spec = st.session_state.book_specs_by_key.get(key)
         if spec is None:
             continue
-        qty = ev.qtyLots * spec.lot_size
+        qty = ev.qty_lots * spec.lot_size
         side_sign = 1.0 if ev.side == Side.BUY else -1.0
-        if ev.updateType == UpdateType.ADD:
+        if ev.update_type == UpdateType.ADD:
             delta = side_sign * qty
         else:
             delta = -side_sign * qty
         st.session_state.event_window[key].append(delta)
 
     for fill in new_fills:
-        key = fill.bookKey
+        key = fill.book_key
         if key in st.session_state.book_counts:
             st.session_state.book_counts[key]["fills"] += 1
 
-        if fill.takerSource != UpdateSource.HISTORICAL:
+        if fill.taker_source != UpdateSource.HISTORICAL:
             continue
         spec = st.session_state.book_specs_by_key.get(key)
         if spec is None:
             continue
-        qty = fill.qtyLots * spec.lot_size
-        side_sign = 1.0 if fill.takerSide == Side.BUY else -1.0
+        qty = fill.qty_lots * spec.lot_size
+        side_sign = 1.0 if fill.taker_side == Side.BUY else -1.0
         st.session_state.fill_window[key].append(side_sign * qty)
 
     if new_events:
-        last_ts = new_events[-1].tsReceived
+        last_ts = new_events[-1].ts_received
         _update_history(last_ts)
 
 
@@ -517,17 +517,17 @@ def _maybe_execute_arbitrage(
         if qty_lots <= 0:
             return False
         ev = NormalizedLobEvent(
-            tsExchange=now,
-            tsReceived=now,
+            ts_exchange=now,
+            ts_received=now,
             side=side,
-            updateType=UpdateType.AGGRESSIVE_TRADE,
-            priceTicks=price_ticks,
-            quantityLots=qty_lots,
-            orderId=st.session_state.next_order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            symbolId=book_key,
-            updateSource=UpdateSource.STRATEGY,
+            update_type=UpdateType.AGGRESSIVE_TRADE,
+            price_ticks=price_ticks,
+            quantity_lots=qty_lots,
+            order_id=st.session_state.next_order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            symbol_id=book_key,
+            update_source=UpdateSource.STRATEGY,
         )
         st.session_state.next_order_id += 1
         sim.submit_strategy_event(book_id, ev, latency=latency_ms * 1000)
@@ -632,7 +632,7 @@ def _plot_btc_mid() -> None:
     fig.update_layout(
         height=320,
         margin=dict(l=20, r=20, t=35, b=30),
-        xaxis_title="tsReceived (us)",
+        xaxis_title="ts_received (us)",
         yaxis_title="mid (price)",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -648,7 +648,7 @@ def _plot_eth_mid() -> None:
     fig.update_layout(
         height=260,
         margin=dict(l=20, r=20, t=35, b=30),
-        xaxis_title="tsReceived (us)",
+        xaxis_title="ts_received (us)",
         yaxis_title="mid (price)",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -668,7 +668,7 @@ def _plot_arb_edges() -> None:
     fig.update_layout(
         height=240,
         margin=dict(l=20, r=20, t=35, b=30),
-        xaxis_title="tsReceived (us)",
+        xaxis_title="ts_received (us)",
         yaxis_title="edge (price)",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -678,19 +678,19 @@ def _strategy_fills_table() -> None:
     sink: InMemoryMultiLogSink = st.session_state.sink
     rows = []
     for fill in sink.fills():
-        if fill.makerSource != UpdateSource.STRATEGY and fill.takerSource != UpdateSource.STRATEGY:
+        if fill.maker_source != UpdateSource.STRATEGY and fill.taker_source != UpdateSource.STRATEGY:
             continue
         rows.append(
             {
                 "seq": fill.seq,
-                "ts_received": _safe_int(fill.tsReceived),
-                "book": fill.bookKey,
-                "price": _price_from_ticks(fill.bookKey, fill.priceTicks),
-                "qty": _qty_from_lots(fill.bookKey, fill.qtyLots),
-                "maker_source": fill.makerSource.name,
-                "taker_source": fill.takerSource.name,
-                "maker_side": fill.makerSide.name,
-                "taker_side": fill.takerSide.name,
+                "ts_received": _safe_int(fill.ts_received),
+                "book": fill.book_key,
+                "price": _price_from_ticks(fill.book_key, fill.price_ticks),
+                "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
+                "maker_source": fill.maker_source.name,
+                "taker_source": fill.taker_source.name,
+                "maker_side": fill.maker_side.name,
+                "taker_side": fill.taker_side.name,
             }
         )
     rows = rows[-100:]
@@ -710,14 +710,14 @@ def _strategy_orders_table(view: str) -> None:
                 continue
             rows.append(
                 {
-                    "created_seq": state.createdSeq,
-                    "order_id": str(state.orderId),
+                    "created_seq": state.created_seq,
+                    "order_id": str(state.order_id),
                     "side": state.side.name,
                     "status": state.status.name,
-                    "price": _price_from_ticks(book_key, state.priceTicks),
-                    "qty_init": _qty_from_lots(book_key, state.initialQty),
-                    "qty_rem": _qty_from_lots(book_key, state.remainingQty),
-                    "qty_filled": _qty_from_lots(book_key, state.filledQty),
+                    "price": _price_from_ticks(book_key, state.price_ticks),
+                    "qty_init": _qty_from_lots(book_key, state.initial_qty),
+                    "qty_rem": _qty_from_lots(book_key, state.remaining_qty),
+                    "qty_filled": _qty_from_lots(book_key, state.filled_qty),
                     "book": book_key,
                 }
             )
@@ -882,7 +882,7 @@ def main() -> None:
     with st.sidebar:
         st.header("Runner")
         batch_size = st.slider("Batch size", min_value=50, max_value=2000, value=200, step=50)
-        require_monotonic = st.checkbox("Require monotonic tsReceived", value=True)
+        require_monotonic = st.checkbox("Require monotonic ts_received", value=True)
         fail_fast = st.checkbox("Fail fast", value=False)
         init_btn = st.button("Initialize / Reset")
 

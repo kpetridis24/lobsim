@@ -24,8 +24,8 @@ class PaperTradingSimulator:
         sides: Sequence[Side],
         prices: Sequence[int],
         quantities: Sequence[int],
-        orderIds: Sequence[int],
-        traderIds: Sequence[int],
+        order_ids: Sequence[int],
+        trader_ids: Sequence[int],
     ) -> None: ...
     def depth_at(self, side: Side, price_ticks: int) -> int | None: ...
     def l2_top_n(self, side: Side, n: int) -> list[tuple[int, int]]: ...

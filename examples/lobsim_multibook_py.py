@@ -147,17 +147,17 @@ def normalize_raw(raw: CoinbaseRaw, *, tick_size: float, lot_size: float, symbol
     qty_lots = to_ticks(raw.entry_sx, lot_size, strict=True)
     oid = stable_int64(raw.order_id)
     return NormalizedLobEvent(
-        tsExchange=raw.ts_exchange_us,
-        tsReceived=raw.ts_received_us,
+        ts_exchange=raw.ts_exchange_us,
+        ts_received=raw.ts_received_us,
         side=side,
-        updateType=ut,
-        priceTicks=price_ticks,
-        quantityLots=qty_lots,
-        orderId=oid,
-        traderId=UnknownTraderIdSentinel,
-        aggressorId=UnknownAggressorIdSentinel,
-        updateSource=UpdateSource.HISTORICAL,
-        symbolId=symbol,
+        update_type=ut,
+        price_ticks=price_ticks,
+        quantity_lots=qty_lots,
+        order_id=oid,
+        trader_id=UnknownTraderIdSentinel,
+        aggressor_id=UnknownAggressorIdSentinel,
+        update_source=UpdateSource.HISTORICAL,
+        symbol_id=symbol,
     )
 
 
@@ -217,17 +217,17 @@ def main():
             # Inject a simple strategy order on spot
             ts_recv = t if t is not None else 0
             strat = NormalizedLobEvent(
-                tsExchange=ts_recv,
-                tsReceived=ts_recv + 1,
+                ts_exchange=ts_recv,
+                ts_received=ts_recv + 1,
                 side=Side.BUY,
-                updateType=UpdateType.ADD,
-                priceTicks=ask_spot or 0,
-                quantityLots=2,
-                orderId=123456000 + steps,
-                traderId=42,
-                aggressorId=NoAggressorNeededSentinel,
-                updateSource=UpdateSource.STRATEGY,
-                symbolId="BTC-USDT",
+                update_type=UpdateType.ADD,
+                price_ticks=ask_spot or 0,
+                quantity_lots=2,
+                order_id=123456000 + steps,
+                trader_id=42,
+                aggressor_id=NoAggressorNeededSentinel,
+                update_source=UpdateSource.STRATEGY,
+                symbol_id="BTC-USDT",
             )
             sim.submit_strategy_event(spot, strat)
 
@@ -236,9 +236,9 @@ def main():
     print(f"Total fills: {len(fills)}")
     for f in fills:
         print(
-            f"  [{f.bookKey}] seq={f.seq} px={f.priceTicks} qty={f.qtyLots} "
-            f"makerSide={int(f.makerSide)} maker={f.makerOrderId} taker={f.takerOrderId} "
-            f"src m/t={int(f.makerSource)}/{int(f.takerSource)}"
+            f"  [{f.book_key}] seq={f.seq} px={f.price_ticks} qty={f.qty_lots} "
+            f"maker_side={int(f.maker_side)} maker={f.maker_order_id} taker={f.taker_order_id} "
+            f"src m/t={int(f.maker_source)}/{int(f.taker_source)}"
         )
 
 

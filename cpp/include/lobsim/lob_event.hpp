@@ -11,28 +11,28 @@ constexpr std::int64_t UnknownAggressorIdSentinel = -1;
 constexpr std::int64_t NoAggressorNeededSentinel = -2;
 
 struct NormalizedLobEvent {
-    std::int64_t tsExchange;
-    std::int64_t tsReceived;
+    std::int64_t ts_exchange;
+    std::int64_t ts_received;
     Side side;
-    UpdateType updateType;
-    std::int64_t priceTicks;
-    std::int64_t quantityLots;
-    std::int64_t orderId;
-    std::int64_t traderId{UnknownTraderIdSentinel};
-    std::int64_t aggressorId{NoAggressorNeededSentinel};
-    UpdateSource updateSource{UpdateSource::HISTORICAL};
-    std::string symbolId;
+    UpdateType update_type;
+    std::int64_t price_ticks;
+    std::int64_t quantity_lots;
+    std::int64_t order_id;
+    std::int64_t trader_id{UnknownTraderIdSentinel};
+    std::int64_t aggressor_id{NoAggressorNeededSentinel};
+    UpdateSource update_source{UpdateSource::HISTORICAL};
+    std::string symbol_id;
 };
 
 struct CoinbaseBTCUSDTRawEvent {
-    std::int64_t tsExchangeUs{};
-    std::int64_t tsReceivedUs{};
+    std::int64_t ts_exchange_us{};
+    std::int64_t ts_received_us{};
 
-    UpdateType updateType{};
+    UpdateType update_type{};
     Side side{};
 
     long double price{};
     long double size{};
 
-    std::string orderId;
+    std::string order_id;
 };

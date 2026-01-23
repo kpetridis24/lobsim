@@ -110,17 +110,17 @@ class CoinbaseBTCUSDTAdapter:
         order_id = stable_int64(raw.order_id)
 
         return NormalizedLobEvent(
-            tsExchange=raw.ts_exchange_us,
-            tsReceived=raw.ts_received_us,
+            ts_exchange=raw.ts_exchange_us,
+            ts_received=raw.ts_received_us,
             side=side,
-            updateType=update_type,
-            priceTicks=price_ticks,
-            quantityLots=qty_lots,
-            orderId=order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            updateSource=UpdateSource.HISTORICAL,
-            symbolId=self.symbol_id,
+            update_type=update_type,
+            price_ticks=price_ticks,
+            quantity_lots=qty_lots,
+            order_id=order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            update_source=UpdateSource.HISTORICAL,
+            symbol_id=self.symbol_id,
         )
 
 
@@ -238,13 +238,13 @@ def main() -> int:
         normalized_events += 1
         if not has_range:
             has_range = True
-            first_ts = ev.tsReceived
-            last_ts = ev.tsReceived
+            first_ts = ev.ts_received
+            last_ts = ev.ts_received
         else:
-            if ev.tsReceived < first_ts:
-                first_ts = ev.tsReceived
-            if ev.tsReceived > last_ts:
-                last_ts = ev.tsReceived
+            if ev.ts_received < first_ts:
+                first_ts = ev.ts_received
+            if ev.ts_received > last_ts:
+                last_ts = ev.ts_received
 
         replay.step(ev)
         engine_updates += 1

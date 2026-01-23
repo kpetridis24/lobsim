@@ -9,7 +9,7 @@ struct BookId {
     bool operator==(const BookId& other) const = default;
 };
 
-inline std::string bookKey(const BookId& id) {
+inline std::string book_key(const BookId& id) {
     if (id.venue.empty()) {
         return id.symbol;
     }

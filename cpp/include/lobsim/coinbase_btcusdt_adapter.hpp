@@ -20,49 +20,49 @@ struct CoinbaseBTCUSDTAdapter {
 
     NormalizedLobEvent normalize(const CoinbaseBTCUSDTRawEvent& raw) const {
         NormalizedLobEvent out{};
-        if (!tryNormalize(raw, out)) {
+        if (!try_normalize(raw, out)) {
             throw std::runtime_error("Failed to normalize Coinbase BTC/USDT raw event");
         }
         return out;
     }
 
-    bool tryNormalize(const CoinbaseBTCUSDTRawEvent& raw, NormalizedLobEvent& out) const {
-        if (raw.tsExchangeUs < 0 || raw.tsReceivedUs < 0)
+    bool try_normalize(const CoinbaseBTCUSDTRawEvent& raw, NormalizedLobEvent& out) const {
+        if (raw.ts_exchange_us < 0 || raw.ts_received_us < 0)
             return false;
 
-        if (raw.orderId.empty())
+        if (raw.order_id.empty())
             return false;
 
         if (!(raw.price >= 0.0L) || !(raw.size >= 0.0L))
             return false;
 
-        auto pxRes = spec_.priceToTicks(raw.price);
-        if (!pxRes.ok)
+        auto px_res = spec_.price_to_ticks(raw.price);
+        if (!px_res.ok)
             return false;
 
-        auto szRes = spec_.quantityToLots(raw.size);
-        if (!szRes.ok)
+        auto sz_res = spec_.quantity_to_lots(raw.size);
+        if (!sz_res.ok)
             return false;
 
-        out.tsExchange = raw.tsExchangeUs;
-        out.tsReceived = raw.tsReceivedUs;
-        out.updateType = raw.updateType;
+        out.ts_exchange = raw.ts_exchange_us;
+        out.ts_received = raw.ts_received_us;
+        out.update_type = raw.update_type;
         out.side = raw.side;
-        out.priceTicks = pxRes.value;
-        out.quantityLots = szRes.value;
+        out.price_ticks = px_res.value;
+        out.quantity_lots = sz_res.value;
 
-        out.orderId = stableOrderId(raw.orderId);
+        out.order_id = stable_order_id(raw.order_id);
 
-        out.traderId = UnknownTraderIdSentinel;
-        out.aggressorId = UnknownAggressorIdSentinel;
-        out.updateSource = UpdateSource::HISTORICAL;
+        out.trader_id = UnknownTraderIdSentinel;
+        out.aggressor_id = UnknownAggressorIdSentinel;
+        out.update_source = UpdateSource::HISTORICAL;
 
-        out.symbolId = spec_.symbol;
+        out.symbol_id = spec_.symbol;
         return true;
     }
 
 private:
-    static std::int64_t stableOrderId(std::string_view value) {
+    static std::int64_t stable_order_id(std::string_view value) {
         std::uint64_t hash = 14695981039346656037ULL;
         for (unsigned char c : value) {
             hash ^= c;

@@ -22,9 +22,9 @@
 namespace {
 
 struct CountingSink final : public ILogSink {
-    void onFill(const FillRecord&) override { ++fills; }
-    void onEventApply(const EventApplyRecord&) override { ++events; }
-    void onDiagnostic(const DiagnosticRecord&) override { ++diagnostics; }
+    void on_fill(const FillRecord&) override { ++fills; }
+    void on_event_apply(const EventApplyRecord&) override { ++events; }
+    void on_diagnostic(const DiagnosticRecord&) override { ++diagnostics; }
     void reset() override {
         fills = 0;
         events = 0;
@@ -38,8 +38,8 @@ struct CountingSink final : public ILogSink {
 
 struct Options {
     std::string path{"sample_data/coinbase_btcusdt_sample.parquet"};
-    std::string tickSize{"0.01"};
-    std::string lotSize{"0.00000001"};
+    std::string tick_size{"0.01"};
+    std::string lot_size{"0.00000001"};
     std::string symbol{"BTC-USDT"};
     std::int64_t maxEvents{0};
     bool useSink{true};
@@ -103,9 +103,9 @@ Options parseOptions(int argc, char** argv) {
         if (arg == "--path") {
             opt.path = nextValue("--path");
         } else if (arg == "--tick-size") {
-            opt.tickSize = nextValue("--tick-size");
+            opt.tick_size = nextValue("--tick-size");
         } else if (arg == "--lot-size") {
-            opt.lotSize = nextValue("--lot-size");
+            opt.lot_size = nextValue("--lot-size");
         } else if (arg == "--symbol") {
             opt.symbol = nextValue("--symbol");
         } else if (arg == "--max-events") {
@@ -151,22 +151,22 @@ int main(int argc, char** argv) {
     PaperTradingSimulator engine;
     CountingSink sink;
     if (opt.useSink) {
-        engine.setLogSink(&sink);
+        engine.set_log_sink(&sink);
     }
 
     lobsim::replay::InstrumentSpec spec{};
     spec.symbol = opt.symbol;
     spec.venue = "coinbase";
-    spec.tickSize = parseDecimal(opt.tickSize);
-    spec.lotSize = parseDecimal(opt.lotSize);
-    spec.pricePolicy = lobsim::replay::RoundingPolicy::Nearest;
-    spec.qtyPolicy = lobsim::replay::RoundingPolicy::Nearest;
+    spec.tick_size = parseDecimal(opt.tick_size);
+    spec.lot_size = parseDecimal(opt.lot_size);
+    spec.price_policy = lobsim::replay::RoundingPolicy::Nearest;
+    spec.qty_policy = lobsim::replay::RoundingPolicy::Nearest;
 
     lobsim::replay::CoinbaseBTCUSDTAdapter adapter(spec);
     lobsim::replay::CoinbaseBTCUSDTParquetSource source(opt.path);
     lobsim::replay::ReplayConfig cfg{};
-    cfg.requireMonotonicTsReceived = true;
-    cfg.failFast = true;
+    cfg.require_monotonic_ts_received = true;
+    cfg.fail_fast = true;
     lobsim::replay::ReplaySession replay(engine, cfg);
 
     CoinbaseBTCUSDTRawEvent raw{};
@@ -179,35 +179,35 @@ int main(int argc, char** argv) {
     const auto wallStart = std::chrono::steady_clock::now();
 
     while (source.next(raw)) {
-        if (opt.maxEvents > 0 && summary.numRawEvents >= static_cast<std::uint64_t>(opt.maxEvents)) {
+        if (opt.maxEvents > 0 && summary.num_raw_events >= static_cast<std::uint64_t>(opt.maxEvents)) {
             break;
         }
-        ++summary.numRawEvents;
+        ++summary.num_raw_events;
         NormalizedLobEvent ev{};
 
         try {
             ev = adapter.normalize(raw);
         } catch (const std::exception&) {
-            ++summary.numAdapterFailures;
-            if (cfg.failFast) {
+            ++summary.num_adapter_failures;
+            if (cfg.fail_fast) {
                 throw;
             }
             continue;
         }
 
-        ++summary.numNormalizedEvents;
+        ++summary.num_normalized_events;
         if (!hasRange) {
             hasRange = true;
-            summary.hasTsRange = true;
-            summary.firstTsReceived = ev.tsReceived;
-            summary.lastTsReceived = ev.tsReceived;
+            summary.has_ts_range = true;
+            summary.first_ts_received = ev.ts_received;
+            summary.last_ts_received = ev.ts_received;
         } else {
-            summary.firstTsReceived = std::min(summary.firstTsReceived, ev.tsReceived);
-            summary.lastTsReceived = std::max(summary.lastTsReceived, ev.tsReceived);
+            summary.first_ts_received = std::min(summary.first_ts_received, ev.ts_received);
+            summary.last_ts_received = std::max(summary.last_ts_received, ev.ts_received);
         }
 
         replay.step(ev);
-        ++summary.numEngineUpdates;
+        ++summary.num_engine_updates;
     }
 
     const auto wallEnd = std::chrono::steady_clock::now();
@@ -217,15 +217,15 @@ int main(int argc, char** argv) {
     const double wallSeconds = std::chrono::duration<double>(wallEnd - wallStart).count();
     const double cpuSeconds = timeDiff(usageStart.ru_utime, usageEnd.ru_utime) + timeDiff(usageStart.ru_stime, usageEnd.ru_stime);
     const std::uint64_t rssBytes = maxRssBytes(usageEnd);
-    const double eventsPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.numEngineUpdates) / wallSeconds) : 0.0;
-    const double rawPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.numRawEvents) / wallSeconds) : 0.0;
+    const double eventsPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.num_engine_updates) / wallSeconds) : 0.0;
+    const double rawPerSec = wallSeconds > 0.0 ? (static_cast<double>(summary.num_raw_events) / wallSeconds) : 0.0;
 
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "benchmark=c++\n";
-    std::cout << "raw_events=" << summary.numRawEvents << "\n";
-    std::cout << "normalized_events=" << summary.numNormalizedEvents << "\n";
-    std::cout << "engine_updates=" << summary.numEngineUpdates << "\n";
-    std::cout << "adapter_failures=" << summary.numAdapterFailures << "\n";
+    std::cout << "raw_events=" << summary.num_raw_events << "\n";
+    std::cout << "normalized_events=" << summary.num_normalized_events << "\n";
+    std::cout << "engine_updates=" << summary.num_engine_updates << "\n";
+    std::cout << "adapter_failures=" << summary.num_adapter_failures << "\n";
     std::cout << "wall_seconds=" << wallSeconds << "\n";
     std::cout << "cpu_seconds=" << cpuSeconds << "\n";
     std::cout << "cpu_utilization=" << (wallSeconds > 0.0 ? (cpuSeconds / wallSeconds) : 0.0) << "\n";

@@ -15,75 +15,75 @@ class IMultiLogSink : public ILogSink {
 public:
     ~IMultiLogSink() override = default;
 
-    virtual std::vector<FillRecord> fillsFor(std::string_view bookKey) const = 0;
-    virtual std::vector<EventApplyRecord> eventsFor(std::string_view bookKey) const = 0;
-    virtual std::vector<DiagnosticRecord> diagnosticsFor(std::string_view bookKey) const = 0;
+    virtual std::vector<FillRecord> fills_for(std::string_view book_key) const = 0;
+    virtual std::vector<EventApplyRecord> events_for(std::string_view book_key) const = 0;
+    virtual std::vector<DiagnosticRecord> diagnostics_for(std::string_view book_key) const = 0;
 };
 
 class BookScopedSink final : public ILogSink {
 public:
-    BookScopedSink(std::string bookKey, IMultiLogSink* parent) : bookKey_(std::move(bookKey)), parent_(parent) {}
+    BookScopedSink(std::string book_key, IMultiLogSink* parent) : book_key_(std::move(book_key)), parent_(parent) {}
 
-    void onFill(const FillRecord& r) override {
+    void on_fill(const FillRecord& r) override {
         FillRecord tagged = r;
-        if (tagged.bookKey.empty()) {
-            tagged.bookKey = bookKey_;
+        if (tagged.book_key.empty()) {
+            tagged.book_key = book_key_;
         }
-        parent_->onFill(tagged);
+        parent_->on_fill(tagged);
     }
-    void onEventApply(const EventApplyRecord& r) override {
+    void on_event_apply(const EventApplyRecord& r) override {
         EventApplyRecord tagged = r;
-        if (tagged.bookKey.empty()) {
-            tagged.bookKey = bookKey_;
+        if (tagged.book_key.empty()) {
+            tagged.book_key = book_key_;
         }
-        parent_->onEventApply(tagged);
+        parent_->on_event_apply(tagged);
     }
-    void onDiagnostic(const DiagnosticRecord& r) override {
+    void on_diagnostic(const DiagnosticRecord& r) override {
         DiagnosticRecord tagged = r;
-        if (tagged.bookKey.empty()) {
-            tagged.bookKey = bookKey_;
+        if (tagged.book_key.empty()) {
+            tagged.book_key = book_key_;
         }
-        parent_->onDiagnostic(tagged);
+        parent_->on_diagnostic(tagged);
     }
     void reset() override {}
 
 private:
-    std::string bookKey_;
+    std::string book_key_;
     IMultiLogSink* parent_{nullptr};
 };
 
 class InMemoryMultiLogSink final : public IMultiLogSink {
 public:
-    void onFill(const FillRecord& r) override {
-        fillIndex_[r.bookKey].push_back(fills_.size());
+    void on_fill(const FillRecord& r) override {
+        fill_index_[r.book_key].push_back(fills_.size());
         fills_.push_back(r);
-        applyStrategyFill(r.bookKey, r.makerOrderId, r.makerSource, PaperOrderFillRole::MAKER, r);
-        applyStrategyFill(r.bookKey, r.takerOrderId, r.takerSource, PaperOrderFillRole::TAKER, r);
+        apply_strategy_fill(r.book_key, r.maker_order_id, r.maker_source, PaperOrderFillRole::MAKER, r);
+        apply_strategy_fill(r.book_key, r.taker_order_id, r.taker_source, PaperOrderFillRole::TAKER, r);
     }
-    void onEventApply(const EventApplyRecord& r) override {
-        eventIndex_[r.bookKey].push_back(events_.size());
+    void on_event_apply(const EventApplyRecord& r) override {
+        event_index_[r.book_key].push_back(events_.size());
         events_.push_back(r);
-        updateStrategyOrder(r);
+        update_strategy_order(r);
     }
-    void onDiagnostic(const DiagnosticRecord& r) override {
-        diagIndex_[r.bookKey].push_back(diagnostics_.size());
+    void on_diagnostic(const DiagnosticRecord& r) override {
+        diag_index_[r.book_key].push_back(diagnostics_.size());
         diagnostics_.push_back(r);
     }
     void reset() override {
         fills_.clear();
         events_.clear();
         diagnostics_.clear();
-        fillIndex_.clear();
-        eventIndex_.clear();
-        diagIndex_.clear();
-        paperLedger_.clear();
-        rejectedStrategyEvents_.clear();
+        fill_index_.clear();
+        event_index_.clear();
+        diag_index_.clear();
+        paper_ledger_.clear();
+        rejected_strategy_events_.clear();
     }
 
-    std::vector<FillRecord> fillsFor(std::string_view bookKey) const override {
+    std::vector<FillRecord> fills_for(std::string_view book_key) const override {
         std::vector<FillRecord> out;
-        auto it = fillIndex_.find(std::string(bookKey));
-        if (it == fillIndex_.end()) {
+        auto it = fill_index_.find(std::string(book_key));
+        if (it == fill_index_.end()) {
             return out;
         }
         out.reserve(it->second.size());
@@ -93,10 +93,10 @@ public:
         return out;
     }
 
-    std::vector<EventApplyRecord> eventsFor(std::string_view bookKey) const override {
+    std::vector<EventApplyRecord> events_for(std::string_view book_key) const override {
         std::vector<EventApplyRecord> out;
-        auto it = eventIndex_.find(std::string(bookKey));
-        if (it == eventIndex_.end()) {
+        auto it = event_index_.find(std::string(book_key));
+        if (it == event_index_.end()) {
             return out;
         }
         out.reserve(it->second.size());
@@ -106,10 +106,10 @@ public:
         return out;
     }
 
-    std::vector<DiagnosticRecord> diagnosticsFor(std::string_view bookKey) const override {
+    std::vector<DiagnosticRecord> diagnostics_for(std::string_view book_key) const override {
         std::vector<DiagnosticRecord> out;
-        auto it = diagIndex_.find(std::string(bookKey));
-        if (it == diagIndex_.end()) {
+        auto it = diag_index_.find(std::string(book_key));
+        if (it == diag_index_.end()) {
             return out;
         }
         out.reserve(it->second.size());
@@ -123,123 +123,124 @@ public:
     const std::vector<EventApplyRecord>& events() const { return events_; }
     const std::vector<DiagnosticRecord>& diagnostics() const { return diagnostics_; }
     const std::unordered_map<std::string, std::unordered_map<std::int64_t, PaperOrderLedgerEntry>>&
-    paperLedger() const {
-        return paperLedger_;
+    paper_ledger() const {
+        return paper_ledger_;
     }
 
-    std::unordered_map<std::int64_t, PaperOrderLedgerEntry> paperLedgerFor(std::string_view bookKey) const {
-        auto it = paperLedger_.find(std::string(bookKey));
-        if (it == paperLedger_.end()) {
+    std::unordered_map<std::int64_t, PaperOrderLedgerEntry> paper_ledger_for(std::string_view book_key) const {
+        auto it = paper_ledger_.find(std::string(book_key));
+        if (it == paper_ledger_.end()) {
             return {};
         }
         return it->second;
     }
 
-    const PaperOrderLedgerEntry* findPaperOrder(std::string_view bookKey, std::int64_t orderId) const {
-        auto it = paperLedger_.find(std::string(bookKey));
-        if (it == paperLedger_.end()) {
+    const PaperOrderLedgerEntry* find_paper_order(std::string_view book_key, std::int64_t order_id) const {
+        auto it = paper_ledger_.find(std::string(book_key));
+        if (it == paper_ledger_.end()) {
             return nullptr;
         }
-        auto entry = it->second.find(orderId);
+        auto entry = it->second.find(order_id);
         if (entry == it->second.end()) {
             return nullptr;
         }
         return &entry->second;
     }
 
-    std::vector<EventApplyRecord> rejectedStrategyEventsFor(std::string_view bookKey) const {
-        auto it = rejectedStrategyEvents_.find(std::string(bookKey));
-        if (it == rejectedStrategyEvents_.end()) {
+    std::vector<EventApplyRecord> rejected_strategy_events_for(std::string_view book_key) const {
+        auto it = rejected_strategy_events_.find(std::string(book_key));
+        if (it == rejected_strategy_events_.end()) {
             return {};
         }
         return it->second;
     }
 
-    std::vector<FillRecord> drainFills() {
+    std::vector<FillRecord> drain_fills() {
         std::vector<FillRecord> out;
         out.swap(fills_);
-        fillIndex_.clear();
+        fill_index_.clear();
         return out;
     }
 
-    std::vector<EventApplyRecord> drainEvents() {
+    std::vector<EventApplyRecord> drain_events() {
         std::vector<EventApplyRecord> out;
         out.swap(events_);
-        eventIndex_.clear();
+        event_index_.clear();
         return out;
     }
 
-    std::vector<DiagnosticRecord> drainDiagnostics() {
+    std::vector<DiagnosticRecord> drain_diagnostics() {
         std::vector<DiagnosticRecord> out;
         out.swap(diagnostics_);
-        diagIndex_.clear();
+        diag_index_.clear();
         return out;
     }
 
 private:
-    void applyStrategyFill(std::string_view bookKey, std::int64_t orderId, UpdateSource source, PaperOrderFillRole role,
-                           const FillRecord& r) {
+    void apply_strategy_fill(std::string_view book_key, std::int64_t order_id, UpdateSource source,
+                             PaperOrderFillRole role, const FillRecord& r) {
         if (source != UpdateSource::STRATEGY) {
             return;
         }
-        if (orderId == UnknownOrderIdSentinel) {
+        if (order_id == UnknownOrderIdSentinel) {
             return;
         }
-        auto it = paperLedger_.find(std::string(bookKey));
-        if (it == paperLedger_.end()) {
+        auto it = paper_ledger_.find(std::string(book_key));
+        if (it == paper_ledger_.end()) {
             return;
         }
-        auto entryIt = it->second.find(orderId);
-        if (entryIt == it->second.end()) {
+        auto entry_it = it->second.find(order_id);
+        if (entry_it == it->second.end()) {
             return;
         }
-        auto& entry = entryIt->second;
+        auto& entry = entry_it->second;
         auto& state = entry.state;
         if (state.status == PaperOrderLedgerStatus::CANCELLED || state.status == PaperOrderLedgerStatus::REJECTED) {
             return;
         }
 
-        PaperOrderFill fill{r.seq, r.tsExchange, r.tsReceived, r.priceTicks, r.qtyLots, role};
+        PaperOrderFill fill{r.seq, r.ts_exchange, r.ts_received, r.price_ticks, r.qty_lots, role};
         entry.fills.push_back(fill);
 
-        if (r.qtyLots > 0) {
-            state.filledQty += r.qtyLots;
-            state.remainingQty = std::max<std::int64_t>(state.remainingQty - r.qtyLots, 0);
+        if (r.qty_lots > 0) {
+            state.filled_qty += r.qty_lots;
+            state.remaining_qty = std::max<std::int64_t>(state.remaining_qty - r.qty_lots, 0);
             state.status =
-                state.remainingQty == 0 ? PaperOrderLedgerStatus::FILLED : PaperOrderLedgerStatus::PARTIALLY_FILLED;
-            state.lastUpdateSeq = r.seq;
+                state.remaining_qty == 0 ? PaperOrderLedgerStatus::FILLED : PaperOrderLedgerStatus::PARTIALLY_FILLED;
+            state.last_update_seq = r.seq;
         }
     }
 
-    void updateStrategyOrder(const EventApplyRecord& r) {
+    void update_strategy_order(const EventApplyRecord& r) {
         if (r.source != UpdateSource::STRATEGY) {
             return;
         }
-        auto& ledger = paperLedger_[r.bookKey];
-        auto& rejected = rejectedStrategyEvents_[r.bookKey];
+        auto& ledger = paper_ledger_[r.book_key];
+        auto& rejected = rejected_strategy_events_[r.book_key];
 
-        switch (r.updateType) {
+        switch (r.update_type) {
         case UpdateType::ADD: {
-            if (r.qtyLots <= 0) {
+            if (r.qty_lots <= 0) {
                 rejected.push_back(r);
                 return;
             }
-            if (ledger.contains(r.orderId)) {
+            if (ledger.contains(r.order_id)) {
                 rejected.push_back(r);
                 return;
             }
             PaperOrderLedgerEntry entry{};
             entry.state = PaperOrderState{
-                r.orderId, r.side, r.priceTicks, r.qtyLots, r.qtyLots, 0, PaperOrderLedgerStatus::OPEN, r.seq, r.seq};
-            ledger.emplace(r.orderId, std::move(entry));
+                r.order_id, r.side, r.price_ticks, r.qty_lots, r.qty_lots, 0, PaperOrderLedgerStatus::OPEN,
+                r.seq,      r.seq};
+            ledger.emplace(r.order_id, std::move(entry));
             return;
         }
         case UpdateType::SUBTRACT: {
-            if (r.qtyLots < 0) {
+            if (r.qty_lots < 0) {
                 rejected.push_back(r);
                 return;
             }
-            auto it = ledger.find(r.orderId);
+            auto it = ledger.find(r.order_id);
             if (it == ledger.end()) {
                 return;
             }
@@ -248,20 +249,20 @@ private:
                 state.status == PaperOrderLedgerStatus::REJECTED) {
                 return;
             }
-            if (r.qtyLots == 0) {
-                state.lastUpdateSeq = r.seq;
+            if (r.qty_lots == 0) {
+                state.last_update_seq = r.seq;
                 return;
             }
-            const auto take = std::min(state.remainingQty, r.qtyLots);
-            state.remainingQty -= take;
-            if (state.remainingQty == 0) {
+            const auto take = std::min(state.remaining_qty, r.qty_lots);
+            state.remaining_qty -= take;
+            if (state.remaining_qty == 0) {
                 state.status = PaperOrderLedgerStatus::CANCELLED;
             }
-            state.lastUpdateSeq = r.seq;
+            state.last_update_seq = r.seq;
             return;
         }
         case UpdateType::SET: {
-            auto it = ledger.find(r.orderId);
+            auto it = ledger.find(r.order_id);
             if (it == ledger.end()) {
                 return;
             }
@@ -270,32 +271,32 @@ private:
                 state.status == PaperOrderLedgerStatus::REJECTED) {
                 return;
             }
-            auto newQty = r.qtyLots < 0 ? 0 : r.qtyLots;
-            state.remainingQty = newQty;
-            const auto totalQty = state.filledQty + state.remainingQty;
-            if (totalQty > state.initialQty) {
-                state.initialQty = totalQty;
+            auto new_qty = r.qty_lots < 0 ? 0 : r.qty_lots;
+            state.remaining_qty = new_qty;
+            const auto total_qty = state.filled_qty + state.remaining_qty;
+            if (total_qty > state.initial_qty) {
+                state.initial_qty = total_qty;
             }
-            if (state.remainingQty == 0) {
+            if (state.remaining_qty == 0) {
                 state.status = PaperOrderLedgerStatus::CANCELLED;
-            } else if (state.filledQty > 0) {
+            } else if (state.filled_qty > 0) {
                 state.status = PaperOrderLedgerStatus::PARTIALLY_FILLED;
             } else {
                 state.status = PaperOrderLedgerStatus::OPEN;
             }
-            state.lastUpdateSeq = r.seq;
+            state.last_update_seq = r.seq;
             return;
         }
         case UpdateType::DELETE: {
-            auto it = ledger.find(r.orderId);
+            auto it = ledger.find(r.order_id);
             if (it == ledger.end()) {
                 return;
             }
             auto& state = it->second.state;
             if (state.status != PaperOrderLedgerStatus::FILLED) {
-                state.remainingQty = 0;
+                state.remaining_qty = 0;
                 state.status = PaperOrderLedgerStatus::CANCELLED;
-                state.lastUpdateSeq = r.seq;
+                state.last_update_seq = r.seq;
             }
             return;
         }
@@ -309,9 +310,9 @@ private:
     std::vector<FillRecord> fills_;
     std::vector<EventApplyRecord> events_;
     std::vector<DiagnosticRecord> diagnostics_;
-    std::unordered_map<std::string, std::vector<std::size_t>> fillIndex_;
-    std::unordered_map<std::string, std::vector<std::size_t>> eventIndex_;
-    std::unordered_map<std::string, std::vector<std::size_t>> diagIndex_;
-    std::unordered_map<std::string, std::unordered_map<std::int64_t, PaperOrderLedgerEntry>> paperLedger_;
-    std::unordered_map<std::string, std::vector<EventApplyRecord>> rejectedStrategyEvents_;
+    std::unordered_map<std::string, std::vector<std::size_t>> fill_index_;
+    std::unordered_map<std::string, std::vector<std::size_t>> event_index_;
+    std::unordered_map<std::string, std::vector<std::size_t>> diag_index_;
+    std::unordered_map<std::string, std::unordered_map<std::int64_t, PaperOrderLedgerEntry>> paper_ledger_;
+    std::unordered_map<std::string, std::vector<EventApplyRecord>> rejected_strategy_events_;
 };

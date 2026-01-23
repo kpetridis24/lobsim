@@ -112,17 +112,17 @@ class LobsterAdapter:
 
         # LOBSTER prices are already scaled by 1e-4 dollars, so we use them directly as ticks.
         return NormalizedLobEvent(
-            tsExchange=raw.ts_exchange_us,
-            tsReceived=raw.ts_exchange_us,
+            ts_exchange=raw.ts_exchange_us,
+            ts_received=raw.ts_exchange_us,
             side=side,
-            updateType=update_type,
-            priceTicks=raw.price_ticks,
-            quantityLots=raw.size,
-            orderId=raw.order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            updateSource=UpdateSource.HISTORICAL,
-            symbolId=self.symbol_id,
+            update_type=update_type,
+            price_ticks=raw.price_ticks,
+            quantity_lots=raw.size,
+            order_id=raw.order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            update_source=UpdateSource.HISTORICAL,
+            symbol_id=self.symbol_id,
         )
 
 

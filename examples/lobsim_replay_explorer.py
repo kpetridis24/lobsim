@@ -95,19 +95,19 @@ def _format_event_rows(events: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": ev.seq,
-                "ts_exchange": _safe_int(ev.tsExchange),
-                "ts_received": _safe_int(ev.tsReceived),
+                "ts_exchange": _safe_int(ev.ts_exchange),
+                "ts_received": _safe_int(ev.ts_received),
                 "side": _enum_label(ev.side),
-                "update_type": _enum_label(ev.updateType),
+                "update_type": _enum_label(ev.update_type),
                 "source": _enum_label(ev.source),
-                "price": _price_from_ticks(ev.priceTicks),
-                "qty": _qty_from_lots(ev.qtyLots),
-                "price_ticks": ev.priceTicks,
-                "qty_lots": ev.qtyLots,
-                "order_id": str(ev.orderId),
-                "trader_id": str(ev.traderId),
-                "aggressor_id": str(ev.aggressorId),
-                "book": ev.bookKey,
+                "price": _price_from_ticks(ev.price_ticks),
+                "qty": _qty_from_lots(ev.qty_lots),
+                "price_ticks": ev.price_ticks,
+                "qty_lots": ev.qty_lots,
+                "order_id": str(ev.order_id),
+                "trader_id": str(ev.trader_id),
+                "aggressor_id": str(ev.aggressor_id),
+                "book": ev.book_key,
             }
         )
     return rows
@@ -119,21 +119,21 @@ def _format_fill_rows(fills: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": fill.seq,
-                "ts_exchange": _safe_int(fill.tsExchange),
-                "ts_received": _safe_int(fill.tsReceived),
-                "price": _price_from_ticks(fill.priceTicks),
-                "qty": _qty_from_lots(fill.qtyLots),
-                "price_ticks": fill.priceTicks,
-                "qty_lots": fill.qtyLots,
-                "maker_side": _enum_label(fill.makerSide),
-                "maker_order_id": str(fill.makerOrderId),
-                "maker_trader_id": str(fill.makerTraderId),
-                "maker_source": _enum_label(fill.makerSource),
-                "taker_side": _enum_label(fill.takerSide),
-                "taker_order_id": str(fill.takerOrderId),
-                "taker_trader_id": str(fill.takerTraderId),
-                "taker_source": _enum_label(fill.takerSource),
-                "book": fill.bookKey,
+                "ts_exchange": _safe_int(fill.ts_exchange),
+                "ts_received": _safe_int(fill.ts_received),
+                "price": _price_from_ticks(fill.price_ticks),
+                "qty": _qty_from_lots(fill.qty_lots),
+                "price_ticks": fill.price_ticks,
+                "qty_lots": fill.qty_lots,
+                "maker_side": _enum_label(fill.maker_side),
+                "maker_order_id": str(fill.maker_order_id),
+                "maker_trader_id": str(fill.maker_trader_id),
+                "maker_source": _enum_label(fill.maker_source),
+                "taker_side": _enum_label(fill.taker_side),
+                "taker_order_id": str(fill.taker_order_id),
+                "taker_trader_id": str(fill.taker_trader_id),
+                "taker_source": _enum_label(fill.taker_source),
+                "book": fill.book_key,
             }
         )
     return rows
@@ -157,13 +157,13 @@ def _format_diag_rows(diags: list[object]) -> list[dict[str, object]]:
         rows.append(
             {
                 "seq": diag.seq,
-                "ts_exchange": _safe_int(diag.tsExchange),
-                "ts_received": _safe_int(diag.tsReceived),
+                "ts_exchange": _safe_int(diag.ts_exchange),
+                "ts_received": _safe_int(diag.ts_received),
                 "code": code_name,
                 "severity": severity_name,
                 "code_id": code_id,
                 "severity_id": severity_id,
-                "book": diag.bookKey,
+                "book": diag.book_key,
             }
         )
     return rows
@@ -183,15 +183,15 @@ def _format_strategy_order_rows(
             continue
         rows.append(
             {
-                "_created_seq": state.createdSeq,
-                "created_seq": _safe_int(state.createdSeq),
-                "last_update_seq": _safe_int(state.lastUpdateSeq),
-                "order_id": str(state.orderId),
+                "_created_seq": state.created_seq,
+                "created_seq": _safe_int(state.created_seq),
+                "last_update_seq": _safe_int(state.last_update_seq),
+                "order_id": str(state.order_id),
                 "side": _enum_label(state.side),
-                "price": _price_from_ticks(state.priceTicks),
-                "qty_initial": _qty_from_lots(state.initialQty),
-                "qty_remaining": _qty_from_lots(state.remainingQty),
-                "qty_filled": _qty_from_lots(state.filledQty),
+                "price": _price_from_ticks(state.price_ticks),
+                "qty_initial": _qty_from_lots(state.initial_qty),
+                "qty_remaining": _qty_from_lots(state.remaining_qty),
+                "qty_filled": _qty_from_lots(state.filled_qty),
                 "status": status_label,
                 "num_fills": len(entry.fills),
                 "book": book_key,
@@ -595,7 +595,7 @@ def main() -> None:
         tick_size = st.number_input("Tick size", value=0.01, format="%.8f")
         lot_size = st.number_input("Lot size", value=1e-8, format="%.10f")
         batch_size = st.number_input("Batch size", value=100, step=200)
-        require_monotonic = st.checkbox("Require monotonic tsReceived", value=True)
+        require_monotonic = st.checkbox("Require monotonic ts_received", value=True)
         fail_fast = st.checkbox("Fail fast", value=False)
 
         if st.button("Initialize / Reset"):
@@ -648,17 +648,17 @@ def main() -> None:
             latency = st.number_input("Latency (us)", value=1, step=1)
             if st.button("Submit strategy event"):
                 ev = NormalizedLobEvent(
-                    tsExchange=0,
-                    tsReceived=0,
+                    ts_exchange=0,
+                    ts_received=0,
                     side=side,
-                    updateType=update_type,
-                    priceTicks=int(price_ticks),
-                    quantityLots=int(qty_lots),
-                    orderId=int(order_id),
-                    traderId=int(order_id),
-                    aggressorId=UnknownAggressorIdSentinel,
-                    updateSource=UpdateSource.STRATEGY,
-                    symbolId="",
+                    update_type=update_type,
+                    price_ticks=int(price_ticks),
+                    quantity_lots=int(qty_lots),
+                    order_id=int(order_id),
+                    trader_id=int(order_id),
+                    aggressor_id=UnknownAggressorIdSentinel,
+                    update_source=UpdateSource.STRATEGY,
+                    symbol_id="",
                 )
                 st.session_state.sim.submit_strategy_event(
                     st.session_state.book_id, ev, int(latency)
@@ -728,7 +728,7 @@ def main() -> None:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(255,250,243,0.8)",
                 font=dict(color="#1b1a17"),
-                xaxis_title="tsReceived (us)",
+                xaxis_title="ts_received (us)",
                 yaxis_title="mid (price)",
                 xaxis=dict(
                     showgrid=True,
@@ -751,7 +751,7 @@ def main() -> None:
         strategy_fills = [
             fill
             for fill in sink.fills()
-            if (fill.makerSource == UpdateSource.STRATEGY or fill.takerSource == UpdateSource.STRATEGY)
+            if (fill.maker_source == UpdateSource.STRATEGY or fill.taker_source == UpdateSource.STRATEGY)
         ]
         _render_table(
             _format_fill_rows(list(reversed(strategy_fills[-100:]))),

@@ -19,11 +19,11 @@ public:
 
     virtual void update(const NormalizedLobEvent& event) = 0;
 
-    virtual void initFromL2Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-                                    const std::vector<std::int64_t>& quantities) = 0;
+    virtual void init_from_l2_snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                                       const std::vector<std::int64_t>& quantities) = 0;
 
-    virtual void initFromL3Snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-                                    const std::vector<std::int64_t>& quantities,
-                                    const std::vector<std::int64_t>& orderIds,
-                                    const std::vector<std::int64_t>& traderIds) = 0;
+    virtual void init_from_l3_snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
+                                       const std::vector<std::int64_t>& quantities,
+                                       const std::vector<std::int64_t>& order_ids,
+                                       const std::vector<std::int64_t>& trader_ids) = 0;
 };
