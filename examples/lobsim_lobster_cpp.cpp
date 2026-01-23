@@ -18,11 +18,11 @@
 namespace {
 
 struct LobsterMessageEvent {
-    std::int64_t tsExchangeUs{};
-    int eventType{};
-    std::int64_t orderId{};
+    std::int64_t ts_exchange_us{};
+    int event_type{};
+    std::int64_t order_id{};
     std::int64_t size{};
-    std::int64_t priceTicks{};
+    std::int64_t price_ticks{};
     int direction{};
 };
 
@@ -30,7 +30,7 @@ struct LobsterOrderbookRow {
     std::vector<std::int64_t> values;
 };
 
-bool parseMessageLine(const std::string& line, LobsterMessageEvent& out) {
+bool parse_message_line(const std::string& line, LobsterMessageEvent& out) {
     if (line.empty()) {
         return false;
     }
@@ -49,7 +49,7 @@ bool parseMessageLine(const std::string& line, LobsterMessageEvent& out) {
     }
     s = end + 1;
 
-    const long long orderId = std::strtoll(s, &end, 10);
+    const long long order_id = std::strtoll(s, &end, 10);
     if (end == s || *end != ',') {
         return false;
     }
@@ -72,18 +72,18 @@ bool parseMessageLine(const std::string& line, LobsterMessageEvent& out) {
         return false;
     }
 
-    out.tsExchangeUs = static_cast<std::int64_t>(std::llround(ts * 1'000'000.0));
-    out.eventType = static_cast<int>(type);
-    out.orderId = static_cast<std::int64_t>(orderId);
+    out.ts_exchange_us = static_cast<std::int64_t>(std::llround(ts * 1'000'000.0));
+    out.event_type = static_cast<int>(type);
+    out.order_id = static_cast<std::int64_t>(order_id);
     out.size = static_cast<std::int64_t>(size);
-    out.priceTicks = static_cast<std::int64_t>(price);
+    out.price_ticks = static_cast<std::int64_t>(price);
     out.direction = static_cast<int>(direction);
     return true;
 }
 
-bool parseOrderbookLine(const std::string& line, std::size_t expectedCols, LobsterOrderbookRow& out) {
+bool parse_orderbook_line(const std::string& line, std::size_t expected_cols, LobsterOrderbookRow& out) {
     out.values.clear();
-    out.values.reserve(expectedCols);
+    out.values.reserve(expected_cols);
 
     if (line.empty()) {
         return false;
@@ -91,13 +91,13 @@ bool parseOrderbookLine(const std::string& line, std::size_t expectedCols, Lobst
     const char* s = line.c_str();
     char* end = nullptr;
 
-    for (std::size_t i = 0; i < expectedCols; ++i) {
+    for (std::size_t i = 0; i < expected_cols; ++i) {
         const long long v = std::strtoll(s, &end, 10);
         if (end == s) {
             return false;
         }
         out.values.push_back(static_cast<std::int64_t>(v));
-        if (i + 1 == expectedCols) {
+        if (i + 1 == expected_cols) {
             return true;
         }
         if (*end != ',') {
@@ -105,17 +105,17 @@ bool parseOrderbookLine(const std::string& line, std::size_t expectedCols, Lobst
         }
         s = end + 1;
     }
-    return out.values.size() == expectedCols;
+    return out.values.size() == expected_cols;
 }
 
 class LobsterMessageSource {
 public:
-    explicit LobsterMessageSource(std::string path, std::size_t skipRows = 0) : file(path) {
+    explicit LobsterMessageSource(std::string path, std::size_t skip_rows = 0) : file(path) {
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open LOBSTER message file: " + path);
         }
         std::string line;
-        for (std::size_t i = 0; i < skipRows; ++i) {
+        for (std::size_t i = 0; i < skip_rows; ++i) {
             if (!std::getline(file, line)) {
                 break;
             }
@@ -128,7 +128,7 @@ public:
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
             }
-            if (parseMessageLine(line, out)) {
+            if (parse_message_line(line, out)) {
                 return true;
             }
         }
@@ -141,13 +141,13 @@ private:
 
 class LobsterOrderbookSource {
 public:
-    LobsterOrderbookSource(std::string path, std::size_t levels, std::size_t skipRows = 0)
+    LobsterOrderbookSource(std::string path, std::size_t levels, std::size_t skip_rows = 0)
         : file(path), levels(levels) {
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open LOBSTER orderbook file: " + path);
         }
         std::string line;
-        for (std::size_t i = 0; i < skipRows; ++i) {
+        for (std::size_t i = 0; i < skip_rows; ++i) {
             if (!std::getline(file, line)) {
                 break;
             }
@@ -155,13 +155,13 @@ public:
     }
 
     bool next(LobsterOrderbookRow& out) {
-        const std::size_t expectedCols = levels * 4;
+        const std::size_t expected_cols = levels * 4;
         std::string line;
         while (std::getline(file, line)) {
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
             }
-            if (parseOrderbookLine(line, expectedCols, out)) {
+            if (parse_orderbook_line(line, expected_cols, out)) {
                 return true;
             }
         }
@@ -179,30 +179,30 @@ public:
 
     NormalizedLobEvent normalize(const LobsterMessageEvent& raw) const {
         NormalizedLobEvent out{};
-        if (!tryNormalize(raw, out)) {
+        if (!try_normalize(raw, out)) {
             throw std::runtime_error("LOBSTER hidden execution (type 5) not applied to visible book");
         }
         return out;
     }
 
-    bool tryNormalize(const LobsterMessageEvent& raw, NormalizedLobEvent& out) const {
-        if (raw.eventType == 5) {
+    bool try_normalize(const LobsterMessageEvent& raw, NormalizedLobEvent& out) const {
+        if (raw.event_type == 5) {
             return false;
         }
 
-        UpdateType updateType{};
-        switch (raw.eventType) {
+        UpdateType update_type{};
+        switch (raw.event_type) {
         case 1:
-            updateType = UpdateType::ADD;
+            update_type = UpdateType::ADD;
             break;
         case 2:
-            updateType = UpdateType::SUBTRACT;
+            update_type = UpdateType::SUBTRACT;
             break;
         case 3:
-            updateType = UpdateType::DELETE;
+            update_type = UpdateType::DELETE;
             break;
         case 4:
-            updateType = UpdateType::MATCH;
+            update_type = UpdateType::MATCH;
             break;
         default:
             throw std::runtime_error("Unsupported LOBSTER event type");
@@ -213,18 +213,18 @@ public:
         }
         const Side side = raw.direction == 1 ? Side::BUY : Side::SELL;
 
-        out.tsExchange = raw.tsExchangeUs;
-        out.tsReceived = raw.tsExchangeUs;
+        out.ts_exchange = raw.ts_exchange_us;
+        out.ts_received = raw.ts_exchange_us;
         out.side = side;
-        out.updateType = updateType;
+        out.update_type = update_type;
         // LOBSTER prices are already scaled by 1e-4 dollars, so we use them directly as ticks.
-        out.priceTicks = raw.priceTicks;
-        out.quantityLots = raw.size;
-        out.orderId = raw.orderId;
-        out.traderId = UnknownTraderIdSentinel;
-        out.aggressorId = UnknownAggressorIdSentinel;
-        out.updateSource = UpdateSource::HISTORICAL;
-        out.symbolId = symbol;
+        out.price_ticks = raw.price_ticks;
+        out.quantity_lots = raw.size;
+        out.order_id = raw.order_id;
+        out.trader_id = UnknownTraderIdSentinel;
+        out.aggressor_id = UnknownAggressorIdSentinel;
+        out.update_source = UpdateSource::HISTORICAL;
+        out.symbol_id = symbol;
         return true;
     }
 
@@ -232,7 +232,7 @@ private:
     std::string symbol;
 };
 
-void initFromOrderbookRow(PaperTradingSimulator& engine, const LobsterOrderbookRow& row, std::size_t levels) {
+void init_from_orderbook_row(PaperTradingSimulator& engine, const LobsterOrderbookRow& row, std::size_t levels) {
     std::vector<Side> sides;
     std::vector<std::int64_t> prices;
     std::vector<std::int64_t> quantities;
@@ -242,104 +242,104 @@ void initFromOrderbookRow(PaperTradingSimulator& engine, const LobsterOrderbookR
     quantities.reserve(levels * 2);
 
     for (std::size_t level = 0; level < levels; ++level) {
-        const auto askPx = row.values[4 * level];
-        const auto askSz = row.values[4 * level + 1];
-        const auto bidPx = row.values[4 * level + 2];
-        const auto bidSz = row.values[4 * level + 3];
+        const auto ask_px = row.values[4 * level];
+        const auto ask_sz = row.values[4 * level + 1];
+        const auto bid_px = row.values[4 * level + 2];
+        const auto bid_sz = row.values[4 * level + 3];
 
-        if (askPx > 0 && askSz > 0) {
+        if (ask_px > 0 && ask_sz > 0) {
             sides.push_back(Side::SELL);
-            prices.push_back(askPx);
-            quantities.push_back(askSz);
+            prices.push_back(ask_px);
+            quantities.push_back(ask_sz);
         }
-        if (bidPx > 0 && bidSz > 0) {
+        if (bid_px > 0 && bid_sz > 0) {
             sides.push_back(Side::BUY);
-            prices.push_back(bidPx);
-            quantities.push_back(bidSz);
+            prices.push_back(bid_px);
+            quantities.push_back(bid_sz);
         }
     }
 
-    engine.initFromL2Snapshot(sides, prices, quantities);
+    engine.init_from_l2_snapshot(sides, prices, quantities);
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string messagePath = "sample_data/AMZN_2012-06-21_34200000_57600000_message_10.csv";
-    std::string orderbookPath = "sample_data/AMZN_2012-06-21_34200000_57600000_orderbook_10.csv";
+    std::string message_path = "sample_data/AMZN_2012-06-21_34200000_57600000_message_10.csv";
+    std::string orderbook_path = "sample_data/AMZN_2012-06-21_34200000_57600000_orderbook_10.csv";
     if (argc > 1) {
-        messagePath = argv[1];
+        message_path = argv[1];
     }
     if (argc > 2) {
-        orderbookPath = argv[2];
+        orderbook_path = argv[2];
     }
 
     constexpr std::size_t levels = 10;
 
     PaperTradingSimulator engine;
     InMemoryLogSink sink;
-    engine.setLogSink(&sink);
+    engine.set_log_sink(&sink);
 
-    LobsterOrderbookSource bookInit(orderbookPath, levels);
-    LobsterOrderbookRow firstRow{};
-    if (!bookInit.next(firstRow)) {
+    LobsterOrderbookSource book_init(orderbook_path, levels);
+    LobsterOrderbookRow first_row{};
+    if (!book_init.next(first_row)) {
         std::cerr << "Failed to read first orderbook row\n";
         return 1;
     }
-    initFromOrderbookRow(engine, firstRow, levels);
+    init_from_orderbook_row(engine, first_row, levels);
 
     // Row i of the orderbook is the state after message row i.
     // We init from row 0 and skip message row 0 to keep alignment.
-    LobsterMessageSource messageSource(messagePath, 1);
-    LobsterOrderbookSource bookSource(orderbookPath, levels, 1);
+    LobsterMessageSource message_source(message_path, 1);
+    LobsterOrderbookSource book_source(orderbook_path, levels, 1);
     LobsterAdapter adapter("AMZN");
     lobsim::replay::ReplayConfig cfg{};
-    cfg.requireMonotonicTsReceived = true;
-    cfg.failFast = true;
+    cfg.require_monotonic_ts_received = true;
+    cfg.fail_fast = true;
     lobsim::replay::ReplaySession replay(engine, cfg);
 
     std::uint64_t processed = 0;
     std::uint64_t applied = 0;
-    std::uint64_t skippedHidden = 0;
+    std::uint64_t skipped_hidden = 0;
     std::uint64_t mismatches = 0;
 
     LobsterMessageEvent raw{};
-    LobsterOrderbookRow bookRow{};
-    while (messageSource.next(raw) && bookSource.next(bookRow)) {
+    LobsterOrderbookRow book_row{};
+    while (message_source.next(raw) && book_source.next(book_row)) {
         ++processed;
         NormalizedLobEvent ev{};
-        if (adapter.tryNormalize(raw, ev)) {
+        if (adapter.try_normalize(raw, ev)) {
             replay.step(ev);
             ++applied;
         } else {
-            ++skippedHidden;
+            ++skipped_hidden;
         }
 
         if (processed % 10000 == 0) {
-            auto topBid = engine.l2TopN(Side::BUY, 1);
-            auto topAsk = engine.l2TopN(Side::SELL, 1);
+            auto top_bid = engine.l2_top_n(Side::BUY, 1);
+            auto top_ask = engine.l2_top_n(Side::SELL, 1);
 
-            const auto bidPx = bookRow.values[2];
-            const auto bidSz = bookRow.values[3];
-            const auto askPx = bookRow.values[0];
-            const auto askSz = bookRow.values[1];
+            const auto bid_px = book_row.values[2];
+            const auto bid_sz = book_row.values[3];
+            const auto ask_px = book_row.values[0];
+            const auto ask_sz = book_row.values[1];
 
-            const bool bidOk =
-                (bidPx == 0 && topBid.empty()) || (!topBid.empty() && topBid[0].first == bidPx &&
-                                                   topBid[0].second == bidSz);
-            const bool askOk =
-                (askPx == 0 && topAsk.empty()) || (!topAsk.empty() && topAsk[0].first == askPx &&
-                                                   topAsk[0].second == askSz);
-            if (!bidOk || !askOk) {
+            const bool bid_ok =
+                (bid_px == 0 && top_bid.empty()) || (!top_bid.empty() && top_bid[0].first == bid_px &&
+                                                   top_bid[0].second == bid_sz);
+            const bool ask_ok =
+                (ask_px == 0 && top_ask.empty()) || (!top_ask.empty() && top_ask[0].first == ask_px &&
+                                                   top_ask[0].second == ask_sz);
+            if (!bid_ok || !ask_ok) {
                 ++mismatches;
             }
 
-            std::cout << "row=" << processed << " applied=" << applied << " skipped_hidden=" << skippedHidden
+            std::cout << "row=" << processed << " applied=" << applied << " skipped_hidden=" << skipped_hidden
                       << " mismatches=" << mismatches << "\n";
         }
     }
 
-    std::cout << "done rows=" << processed << " applied=" << applied << " skipped_hidden=" << skippedHidden
+    std::cout << "done rows=" << processed << " applied=" << applied << " skipped_hidden=" << skipped_hidden
               << " mismatches=" << mismatches << "\n";
     return 0;
 }

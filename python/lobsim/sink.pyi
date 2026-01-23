@@ -13,22 +13,22 @@ class PaperOrderFillRole: ...
 
 class PaperOrderFill:
     seq: int
-    tsExchange: int
-    tsReceived: int
-    priceTicks: int
-    qtyLots: int
+    ts_exchange: int
+    ts_received: int
+    price_ticks: int
+    qty_lots: int
     role: PaperOrderFillRole
 
 class PaperOrderState:
-    orderId: int
+    order_id: int
     side: Side
-    priceTicks: int
-    initialQty: int
-    remainingQty: int
-    filledQty: int
+    price_ticks: int
+    initial_qty: int
+    remaining_qty: int
+    filled_qty: int
     status: PaperOrderLedgerStatus
-    createdSeq: int
-    lastUpdateSeq: int
+    created_seq: int
+    last_update_seq: int
 
 class PaperOrderLedgerEntry:
     state: PaperOrderState
@@ -36,41 +36,41 @@ class PaperOrderLedgerEntry:
 
 class FillRecord:
     seq: int
-    tsExchange: int
-    tsReceived: int
-    priceTicks: int
-    qtyLots: int
-    makerSide: Side
-    makerOrderId: int
-    makerTraderId: int
-    makerSource: UpdateSource
-    takerSide: Side
-    takerOrderId: int
-    takerTraderId: int
-    takerSource: UpdateSource
-    bookKey: str
+    ts_exchange: int
+    ts_received: int
+    price_ticks: int
+    qty_lots: int
+    maker_side: Side
+    maker_order_id: int
+    maker_trader_id: int
+    maker_source: UpdateSource
+    taker_side: Side
+    taker_order_id: int
+    taker_trader_id: int
+    taker_source: UpdateSource
+    book_key: str
 
 class EventApplyRecord:
     seq: int
-    tsExchange: int
-    tsReceived: int
+    ts_exchange: int
+    ts_received: int
     side: Side
-    updateType: UpdateType
+    update_type: UpdateType
     source: UpdateSource
-    priceTicks: int
-    qtyLots: int
-    orderId: int
-    traderId: int
-    aggressorId: int
-    bookKey: str
+    price_ticks: int
+    qty_lots: int
+    order_id: int
+    trader_id: int
+    aggressor_id: int
+    book_key: str
 
 class DiagnosticRecord:
     seq: int
-    tsExchange: int
-    tsReceived: int
+    ts_exchange: int
+    ts_received: int
     code: DiagnosticRecordCode
     severity: DiagnosticRecordSeverity
-    bookKey: str
+    book_key: str
 
 class InMemoryLogSink:
     def __init__(self) -> None: ...
@@ -88,14 +88,14 @@ class InMemoryMultiLogSink:
     def fills(self) -> list[FillRecord]: ...
     def events(self) -> list[EventApplyRecord]: ...
     def diagnostics(self) -> list[DiagnosticRecord]: ...
-    def fills_for(self, bookKey: str) -> list[FillRecord]: ...
-    def events_for(self, bookKey: str) -> list[EventApplyRecord]: ...
-    def diagnostics_for(self, bookKey: str) -> list[DiagnosticRecord]: ...
+    def fills_for(self, book_key: str) -> list[FillRecord]: ...
+    def events_for(self, book_key: str) -> list[EventApplyRecord]: ...
+    def diagnostics_for(self, book_key: str) -> list[DiagnosticRecord]: ...
     def paper_ledger(self) -> dict[str, dict[int, PaperOrderLedgerEntry]]: ...
-    def paper_ledger_for(self, bookKey: str) -> dict[int, PaperOrderLedgerEntry]: ...
+    def paper_ledger_for(self, book_key: str) -> dict[int, PaperOrderLedgerEntry]: ...
     def find_paper_order(
-        self, bookKey: str, order_id: int
+        self, book_key: str, order_id: int
     ) -> PaperOrderLedgerEntry | None: ...
-    def rejected_strategy_events_for(self, bookKey: str) -> list[EventApplyRecord]: ...
+    def rejected_strategy_events_for(self, book_key: str) -> list[EventApplyRecord]: ...
 
 __all__: list[str]

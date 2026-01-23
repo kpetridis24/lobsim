@@ -9,38 +9,38 @@
 struct FillRecord {
 public:
     std::uint64_t seq;
-    std::int64_t tsExchange;
-    std::int64_t tsReceived;
-    std::int64_t priceTicks;
-    std::int64_t qtyLots;
+    std::int64_t ts_exchange;
+    std::int64_t ts_received;
+    std::int64_t price_ticks;
+    std::int64_t qty_lots;
     // Passive order
-    Side makerSide;
-    std::int64_t makerOrderId;
-    std::int64_t makerTraderId;
-    UpdateSource makerSource;
+    Side maker_side;
+    std::int64_t maker_order_id;
+    std::int64_t maker_trader_id;
+    UpdateSource maker_source;
     // Aggressive order
-    Side takerSide;
-    std::int64_t takerOrderId;
-    std::int64_t takerTraderId;
-    UpdateSource takerSource;
-    std::string bookKey;
+    Side taker_side;
+    std::int64_t taker_order_id;
+    std::int64_t taker_trader_id;
+    UpdateSource taker_source;
+    std::string book_key;
 };
 
 struct EventApplyRecord {
     std::uint64_t seq;
-    std::int64_t tsExchange;
-    std::int64_t tsReceived;
+    std::int64_t ts_exchange;
+    std::int64_t ts_received;
 
     Side side;
-    UpdateType updateType;
+    UpdateType update_type;
     UpdateSource source;
 
-    std::int64_t priceTicks;
-    std::int64_t qtyLots;
-    std::int64_t orderId;
-    std::int64_t traderId;
-    std::int64_t aggressorId;
-    std::string bookKey;
+    std::int64_t price_ticks;
+    std::int64_t qty_lots;
+    std::int64_t order_id;
+    std::int64_t trader_id;
+    std::int64_t aggressor_id;
+    std::string book_key;
 };
 
 enum class DiagnosticRecordCode : std::uint8_t {
@@ -81,18 +81,18 @@ enum class DiagnosticRecordSeverity : std::uint8_t { INFO = 0, WARNING = 1, ERRO
 
 struct DiagnosticRecord {
     std::uint64_t seq;
-    std::int64_t tsExchange;
-    std::int64_t tsReceived;
+    std::int64_t ts_exchange;
+    std::int64_t ts_received;
     DiagnosticRecordCode code;
     DiagnosticRecordSeverity severity;
-    std::string bookKey;
+    std::string book_key;
 };
 
 class ILogSink {
 public:
     virtual ~ILogSink() = default;
-    virtual void onFill(const FillRecord& r) = 0;
-    virtual void onEventApply(const EventApplyRecord& r) = 0;
-    virtual void onDiagnostic(const DiagnosticRecord& r) = 0;
+    virtual void on_fill(const FillRecord& r) = 0;
+    virtual void on_event_apply(const EventApplyRecord& r) = 0;
+    virtual void on_diagnostic(const DiagnosticRecord& r) = 0;
     virtual void reset() {}
 };

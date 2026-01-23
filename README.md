@@ -20,7 +20,7 @@
 
 `lobsim` is a fast, deterministic **L3 limit order book replay + paper execution simulator** for market microstructure research and strategy prototyping.
 
-It consumes an event stream (historical and/or strategy-injected), maintains a **strict per-order (L3)** book state (requires stable `orderId`s for historical events), and emits facts (fills + diagnostics) via a pluggable sink interface.
+It consumes an event stream (historical and/or strategy-injected), maintains a **strict per-order (L3)** book state (requires stable `order_id`s for historical events), and emits facts (fills + diagnostics) via a pluggable sink interface.
 The core is written in **C++20** for performance, with **Python bindings** for research workflows.
 
 ## Why use it
@@ -53,18 +53,18 @@ from lobsim.types import Side
 
 best_bid = engine.get_best_price_ticks(Side.BUY)
 best_ask = engine.get_best_price_ticks(Side.SELL)
-top10_bids = engine.l2_top_n(Side.BUY, 10)  # [(priceTicks, qtyLots), ...]
+top10_bids = engine.l2_top_n(Side.BUY, 10)  # [(price_ticks, qty_lots), ...]
 ```
 
 ### `NormalizedLobEvent` (canonical event schema)
 `NormalizedLobEvent` is the “input language” of the engine.
 
 Important fields / conventions:
-- `tsReceived`, `tsExchange`: integer timestamps in **microseconds** (you decide the epoch; just stay consistent).
-- `priceTicks`, `quantityLots`: integers on a fixed grid (defined by your `tick_size` / `lot_size` in the adapter).
-- `orderId`: stable identifier for a **single** historical L3 order (or a synthetic per-level ID if you intentionally normalize an L2 feed).
-- `symbolId`: book identifier (used by `MultiBookSimulator`; for single-book it can be any string).
-- `updateSource`: whether the event is `HISTORICAL` (market feed) or `STRATEGY` (your paper/strategy actions).
+- `ts_received`, `ts_exchange`: integer timestamps in **microseconds** (you decide the epoch; just stay consistent).
+- `price_ticks`, `quantity_lots`: integers on a fixed grid (defined by your `tick_size` / `lot_size` in the adapter).
+- `order_id`: stable identifier for a **single** historical L3 order (or a synthetic per-level ID if you intentionally normalize an L2 feed).
+- `symbol_id`: book identifier (used by `MultiBookSimulator`; for single-book it can be any string).
+- `update_source`: whether the event is `HISTORICAL` (market feed) or `STRATEGY` (your paper/strategy actions).
 
 Minimal construction (Python):
 ```python
@@ -72,58 +72,58 @@ from lobsim.lob_event import NormalizedLobEvent
 from lobsim.types import Side, UpdateSource, UpdateType, UnknownAggressorIdSentinel, UnknownTraderIdSentinel
 
 ev = NormalizedLobEvent(
-    tsExchange=0,
-    tsReceived=123_456,
+    ts_exchange=0,
+    ts_received=123_456,
     side=Side.BUY,
-    updateType=UpdateType.ADD,
-    priceTicks=9_355_000,
-    quantityLots=100_000,
-    orderId=1,
-    traderId=UnknownTraderIdSentinel,
-    aggressorId=UnknownAggressorIdSentinel,
-    updateSource=UpdateSource.HISTORICAL,
-    symbolId="coinbase:BTC-USDT",
+    update_type=UpdateType.ADD,
+    price_ticks=9_355_000,
+    quantity_lots=100_000,
+    order_id=1,
+    trader_id=UnknownTraderIdSentinel,
+    aggressor_id=UnknownAggressorIdSentinel,
+    update_source=UpdateSource.HISTORICAL,
+    symbol_id="coinbase:BTC-USDT",
 )
 engine.update(ev)
 ```
 
 ### What each `UpdateType` means (and when to use it)
-`lobsim` is fundamentally **L3** (per-order). The engine assumes that historical updates refer to an existing order object via `orderId` (unless you intentionally normalize an L2 feed into synthetic per-level “orders”).
+`lobsim` is fundamentally **L3** (per-order). The engine assumes that historical updates refer to an existing order object via `order_id` (unless you intentionally normalize an L2 feed into synthetic per-level “orders”).
 
 #### `ADD`
-Creates a new order with a unique `orderId` and initial `quantityLots` at `priceTicks`.
+Creates a new order with a unique `order_id` and initial `quantity_lots` at `price_ticks`.
 - **Historical `ADD`**: represents a new resting market order.
 - **Strategy `ADD`**: represents a paper limit order. If the price is marketable, it will generate immediate taker fills; any remaining quantity becomes a resting **paper** order (it does not alter historical liquidity).
 
 #### `DELETE`
-Cancels an existing order (`orderId`) by setting its remaining quantity to zero.
-- Use this for full cancels. (`quantityLots` is typically `0`.)
+Cancels an existing order (`order_id`) by setting its remaining quantity to zero.
+- Use this for full cancels. (`quantity_lots` is typically `0`.)
 
 #### `SUBTRACT`
-Reduces the remaining quantity of an existing order (`orderId`) by `quantityLots`.
+Reduces the remaining quantity of an existing order (`order_id`) by `quantity_lots`.
 - Use for partial cancels / partial reductions.
-- `quantityLots < 0` is invalid.
+- `quantity_lots < 0` is invalid.
 
 #### `SET`
-Overwrites the remaining quantity of an existing order (`orderId`) to `quantityLots`.
+Overwrites the remaining quantity of an existing order (`order_id`) to `quantity_lots`.
 - Use this if your feed explicitly encodes “set remaining size to X”.
 - This is also the typical normalization target when you treat a missing-ID feed as L2 and maintain “total level size”.
 
 #### `MATCH`
-Represents a trade that removes liquidity from a **passive** existing order (`orderId`) by `quantityLots`.
+Represents a trade that removes liquidity from a **passive** existing order (`order_id`) by `quantity_lots`.
 - Use this for feeds that emit passive-side trade events directly (instead of encoding trades as marketable `ADD`s).
 
 #### `AGGRESSIVE_TRADE` (strategy-only)
 A strategy “market-style” order that consumes the current opposite book immediately (no need to know the exact crossing price).
 - It does **not** rest any remainder.
 - The historical book is not mutated; fills are emitted as if you traded against that liquidity.
-- In the current implementation, `priceTicks` is treated as metadata (the engine uses the current best levels).
+- In the current implementation, `price_ticks` is treated as metadata (the engine uses the current best levels).
 
 ### Observability: `ILogSink` / `InMemoryLogSink`
 Sinks receive the facts emitted by the engine:
 - `FillRecord`: executed trades (maker/taker, qty/price, timestamps, sources).
 - `EventApplyRecord`: what the engine attempted to apply (useful for audit + debugging).
-- `DiagnosticRecord`: structured warnings/errors with event context (e.g., “DELETE non-existing orderId”).
+- `DiagnosticRecord`: structured warnings/errors with event context (e.g., “DELETE non-existing order_id”).
 
 Attach a sink (Python):
 ```python
@@ -141,7 +141,7 @@ diagnostics = sink.get_diagnostics()
 
 ### Multi-book: `BookId`, `MultiBookSimulator`, `InMemoryMultiLogSink`
 `MultiBookSimulator` composes many `PaperTradingSimulator` instances and:
-- merges the next event across all registered streams by `tsReceived` (no look-ahead),
+- merges the next event across all registered streams by `ts_received` (no look-ahead),
 - maintains a single “current time”,
 - lets you inject strategy events per book with optional latency.
 
@@ -177,17 +177,17 @@ from lobsim.types import Side, UpdateType, UpdateSource, UnknownAggressorIdSenti
 sim.submit_strategy_event(
     book,
     NormalizedLobEvent(
-        tsExchange=0,
-        tsReceived=0,  # 0 means “relative to current time” in MultiBookSimulator
+        ts_exchange=0,
+        ts_received=0,  # 0 means “relative to current time” in MultiBookSimulator
         side=Side.BUY,
-        updateType=UpdateType.AGGRESSIVE_TRADE,
-        priceTicks=0,
-        quantityLots=100_000,
-        orderId=123,
-        traderId=UnknownTraderIdSentinel,
-        aggressorId=UnknownAggressorIdSentinel,
-        updateSource=UpdateSource.STRATEGY,
-        symbolId="",  # will be filled to the bookKey
+        update_type=UpdateType.AGGRESSIVE_TRADE,
+        price_ticks=0,
+        quantity_lots=100_000,
+        order_id=123,
+        trader_id=UnknownTraderIdSentinel,
+        aggressor_id=UnknownAggressorIdSentinel,
+        update_source=UpdateSource.STRATEGY,
+        symbol_id="",  # will be filled to the book_key
     ),
     latency=1_000,  # microseconds
 )
@@ -195,14 +195,14 @@ sim.submit_strategy_event(
 
 ## Event stream requirements (L3) + handling missing / NaN order IDs
 
-`lobsim` is an **L3 (per-order)** simulator. That means the engine assumes that **every historical order update refers to a concrete order object** via a stable `orderId`.
+`lobsim` is an **L3 (per-order)** simulator. That means the engine assumes that **every historical order update refers to a concrete order object** via a stable `order_id`.
 
 ### ✅ L3 assumption (default)
 For historical events, the engine expects:
 
-- `orderId` is present and stable for the lifetime of the order
-- `ADD(orderId)` is unique (no duplicate `ADD` for the same live order)
-- `SET / SUBTRACT / DELETE / MATCH` refer to an existing `orderId`
+- `order_id` is present and stable for the lifetime of the order
+- `ADD(order_id)` is unique (no duplicate `ADD` for the same live order)
+- `SET / SUBTRACT / DELETE / MATCH` refer to an existing `order_id`
 - FIFO queueing at a price level is preserved using order arrival order
 
 If your feed satisfies this, you get full L3 behavior: queue priority, maker/taker attribution, and order lifecycle tracking.
@@ -210,7 +210,7 @@ If your feed satisfies this, you get full L3 behavior: queue priority, maker/tak
 ---
 
 ### ⚠️ Missing / NaN order IDs (L2-style feeds)
-Some event streams provide **no order IDs** (e.g., `orderId = NaN/null`), or provide them only partially. In these cases, the feed is effectively **L2 (price-level)**, and it is **not possible** to reconstruct true FIFO queue priority.
+Some event streams provide **no order IDs** (e.g., `order_id = NaN/null`), or provide them only partially. In these cases, the feed is effectively **L2 (price-level)**, and it is **not possible** to reconstruct true FIFO queue priority.
 
 `lobsim` intentionally does **not** guess semantics inside the engine.
 Instead, **the data source / adapter must normalize** such feeds into valid L3-like events.
@@ -219,22 +219,22 @@ Instead, **the data source / adapter must normalize** such feeds into valid L3-l
 If a **substantial majority** of events have missing IDs, treat the stream as **pure L2**:
 
 1) **Ignore all order IDs from the feed** (treat them as missing)
-2) Maintain a level state: `level_qty[(symbol, side, priceTicks)] -> qtyLots`
-3) Emit a deterministic synthetic `orderId` per price level:
+2) Maintain a level state: `level_qty[(symbol, side, price_ticks)] -> qty_lots`
+3) Emit a deterministic synthetic `order_id` per price level:
 
 ```python
-levelId = f(symbol, side, priceTicks) # must be collision-safe
+levelId = f(symbol, side, price_ticks) # must be collision-safe
 ```
 
 
 4) Convert incoming updates into `ADD/SET/DELETE` on the synthetic levelId:
 
 - First time a level appears with qty > 0:
-  - emit `ADD(levelId, priceTicks, qtyLots)`
+  - emit `ADD(levelId, price_ticks, qty_lots)`
 - If the level already exists:
-  - emit `SET(levelId, priceTicks, newQtyLots)`  
+  - emit `SET(levelId, price_ticks, newQtyLots)`  
 - If `newQtyLots == 0`:
-  - emit `DELETE(levelId, priceTicks, 0)`
+  - emit `DELETE(levelId, price_ticks, 0)`
 
 This produces stable and realistic **top-of-book + depth evolution** while keeping the engine API unchanged.
 
@@ -259,7 +259,7 @@ Make sure the synthetic ID namespace **cannot collide** with real order IDs.
 ---
 
 ### Why this is handled in the source (not the engine)
-A missing `orderId` does not have a single universal meaning. Depending on the venue/data vendor, it can represent:
+A missing `order_id` does not have a single universal meaning. Depending on the venue/data vendor, it can represent:
 - L2 price-level deltas
 - aggregated snapshots
 - feed corruption / partial packet loss

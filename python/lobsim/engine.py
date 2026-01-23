@@ -42,10 +42,10 @@ class PaperTradingSimulator(_PaperTradingSimulator):
         sides: Sequence[Side],
         prices: Sequence[int],
         quantities: Sequence[int],
-        orderIds: Sequence[int],
-        traderIds: Sequence[int],
+        order_ids: Sequence[int],
+        trader_ids: Sequence[int],
     ) -> None:
-        super().init_from_l3_snapshot(sides, prices, quantities, orderIds, traderIds)
+        super().init_from_l3_snapshot(sides, prices, quantities, order_ids, trader_ids)
 
     def depth_at(self, side: Side, price_ticks: int) -> int | None:
         return super().depth_at(side, price_ticks)

@@ -1,26 +1,26 @@
 class NormalizedLobEvent:
-    tsExchange: int
-    tsReceived: int
+    ts_exchange: int
+    ts_received: int
     side: object
-    updateType: object
-    priceTicks: int
-    quantityLots: int
-    orderId: int
-    traderId: int
-    aggressorId: int
-    updateSource: object
-    symbolId: str
+    update_type: object
+    price_ticks: int
+    quantity_lots: int
+    order_id: int
+    trader_id: int
+    aggressor_id: int
+    update_source: object
+    symbol_id: str
     def __init__(
         self,
-        tsExchange: int = 0,
-        tsReceived: int = 0,
+        ts_exchange: int = 0,
+        ts_received: int = 0,
         side=...,  # lobsim.types.Side
-        updateType=...,  # lobsim.types.UpdateType
-        priceTicks: int = 0,
-        quantityLots: int = 0,
-        orderId: int = ...,
-        traderId: int = ...,
-        aggressorId: int = ...,
-        updateSource=...,  # lobsim.types.UpdateSource
-        symbolId: str = "",
+        update_type=...,  # lobsim.types.UpdateType
+        price_ticks: int = 0,
+        quantity_lots: int = 0,
+        order_id: int = ...,
+        trader_id: int = ...,
+        aggressor_id: int = ...,
+        update_source=...,  # lobsim.types.UpdateSource
+        symbol_id: str = "",
     ) -> None: ...

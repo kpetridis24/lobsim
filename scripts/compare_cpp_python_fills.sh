@@ -174,17 +174,17 @@ class CoinbaseBTCUSDTAdapter:
         order_id = fnv1a_64_signed(raw.order_id)
 
         return NormalizedLobEvent(
-            tsExchange=raw.ts_exchange_us,
-            tsReceived=raw.ts_received_us,
+            ts_exchange=raw.ts_exchange_us,
+            ts_received=raw.ts_received_us,
             side=side,
-            updateType=update_type,
-            priceTicks=price_ticks,
-            quantityLots=qty_lots,
-            orderId=order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            updateSource=UpdateSource.HISTORICAL,
-            symbolId=self.symbol_id,
+            update_type=update_type,
+            price_ticks=price_ticks,
+            quantity_lots=qty_lots,
+            order_id=order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            update_source=UpdateSource.HISTORICAL,
+            symbol_id=self.symbol_id,
         )
 
 
@@ -226,18 +226,18 @@ def main() -> None:
             writer.writerow(
                 [
                     r.seq,
-                    r.tsExchange,
-                    r.tsReceived,
-                    r.priceTicks,
-                    r.qtyLots,
-                    int(r.makerSide),
-                    r.makerOrderId,
-                    r.makerTraderId,
-                    int(r.makerSource),
-                    int(r.takerSide),
-                    r.takerOrderId,
-                    r.takerTraderId,
-                    int(r.takerSource),
+                    r.ts_exchange,
+                    r.ts_received,
+                    r.price_ticks,
+                    r.qty_lots,
+                    int(r.maker_side),
+                    r.maker_order_id,
+                    r.maker_trader_id,
+                    int(r.maker_source),
+                    int(r.taker_side),
+                    r.taker_order_id,
+                    r.taker_trader_id,
+                    int(r.taker_source),
                 ]
             )
 

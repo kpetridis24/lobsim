@@ -15,7 +15,7 @@
 
 namespace lobsim::replay {
 
-static UpdateType parseUpdateType(std::string_view s) {
+static UpdateType parse_update_type(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
         s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))
@@ -42,7 +42,7 @@ static UpdateType parseUpdateType(std::string_view s) {
     throw std::runtime_error("Unknown update_type: " + std::string(s));
 }
 
-static std::int64_t parseHhMmSsToUs(std::string_view sv) {
+static std::int64_t parse_hh_mm_ss_to_us(std::string_view sv) {
     auto is_digit = [](char c) { return c >= '0' && c <= '9'; };
 
     // trim
@@ -94,8 +94,8 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
     std::unique_ptr<parquet::arrow::FileReader> reader;
     std::shared_ptr<arrow::RecordBatchReader> rb_reader;
     std::shared_ptr<arrow::RecordBatch> batch;
-    std::int64_t rowInBatch = 0;
-    std::int64_t globalRow = 0;
+    std::int64_t row_in_batch = 0;
+    std::int64_t global_row = 0;
 
     int col_time_exchange = -1;
     int col_time_feed = -1;
@@ -110,7 +110,7 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
     arrow::TimeUnit::type time_exchange_unit{};
     arrow::TimeUnit::type time_feed_unit{};
 
-    explicit Impl(std::string path, std::int64_t batchSizeRows) {
+    explicit Impl(std::string path, std::int64_t batch_size_rows) {
         auto infile_res = arrow::io::ReadableFile::Open(path);
         if (!infile_res.ok()) {
             throw std::runtime_error(infile_res.status().ToString());
@@ -129,7 +129,7 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
             throw std::runtime_error(st.ToString());
         }
         reader = std::move(reader_local);
-        reader->set_batch_size(batchSizeRows);
+        reader->set_batch_size(batch_size_rows);
 
         std::shared_ptr<arrow::Schema> schema;
         PARQUET_THROW_NOT_OK(reader->GetSchema(&schema));
@@ -208,9 +208,9 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
         rb_reader = std::move(rb_reader_local);
     }
 
-    bool loadNextBatch() {
+    bool load_next_batch() {
         batch.reset();
-        rowInBatch = 0;
+        row_in_batch = 0;
         auto st = rb_reader->ReadNext(&batch);
         if (!st.ok()) {
             throw std::runtime_error(st.ToString());
@@ -218,18 +218,18 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
         return static_cast<bool>(batch);
     }
 
-    std::int64_t readTimeUs(const std::shared_ptr<arrow::Array>& arr, std::int64_t row, bool isString,
-                            arrow::TimeUnit::type unit) {
+    std::int64_t read_time_us(const std::shared_ptr<arrow::Array>& arr, std::int64_t row, bool is_string,
+                              arrow::TimeUnit::type unit) {
         if (arr->IsNull(row))
-            throw std::runtime_error("Null time at row " + std::to_string(globalRow));
+            throw std::runtime_error("Null time at row " + std::to_string(global_row));
 
-        if (isString) {
+        if (is_string) {
             if (arr->type_id() == arrow::Type::STRING) {
                 auto a = std::static_pointer_cast<arrow::StringArray>(arr);
-                return parseHhMmSsToUs(a->GetView(row));
+                return parse_hh_mm_ss_to_us(a->GetView(row));
             } else {
                 auto a = std::static_pointer_cast<arrow::LargeStringArray>(arr);
-                return parseHhMmSsToUs(a->GetView(row));
+                return parse_hh_mm_ss_to_us(a->GetView(row));
             }
         }
 
@@ -253,12 +253,12 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
 
     bool next(CoinbaseBTCUSDTRawEvent& out) {
         while (true) {
-            if (!batch || rowInBatch >= batch->num_rows()) {
-                if (!loadNextBatch())
+            if (!batch || row_in_batch >= batch->num_rows()) {
+                if (!load_next_batch())
                     return false;
             }
 
-            const std::int64_t r = rowInBatch++;
+            const std::int64_t r = row_in_batch++;
 
             // Column order in reader matches cols vector order, not original schema indices
             // We requested 7 columns in that exact order:
@@ -271,21 +271,21 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
             auto a_entry_sx = batch->column(5);
             auto a_order_id = batch->column(6);
 
-            out.tsExchangeUs = readTimeUs(a_time_exchange, r, time_exchange_is_string, time_exchange_unit);
-            out.tsReceivedUs = readTimeUs(a_time_feed, r, time_feed_is_string, time_feed_unit);
+            out.ts_exchange_us = read_time_us(a_time_exchange, r, time_exchange_is_string, time_exchange_unit);
+            out.ts_received_us = read_time_us(a_time_feed, r, time_feed_is_string, time_feed_unit);
 
             if (a_update_type->IsNull(r))
-                throw std::runtime_error("Null update_type at row " + std::to_string(globalRow));
+                throw std::runtime_error("Null update_type at row " + std::to_string(global_row));
             std::string_view ut;
             if (a_update_type->type_id() == arrow::Type::STRING) {
                 ut = std::static_pointer_cast<arrow::StringArray>(a_update_type)->GetView(r);
             } else {
                 ut = std::static_pointer_cast<arrow::LargeStringArray>(a_update_type)->GetView(r);
             }
-            out.updateType = parseUpdateType(ut);
+            out.update_type = parse_update_type(ut);
 
             if (a_is_buy->IsNull(r))
-                throw std::runtime_error("Null is_buy at row " + std::to_string(globalRow));
+                throw std::runtime_error("Null is_buy at row " + std::to_string(global_row));
             // support int/bool
             if (a_is_buy->type_id() == arrow::Type::INT64) {
                 auto v = std::static_pointer_cast<arrow::Int64Array>(a_is_buy)->Value(r);
@@ -301,7 +301,7 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
             }
 
             if (a_entry_px->IsNull(r) || a_entry_sx->IsNull(r))
-                throw std::runtime_error("Null price/size at row " + std::to_string(globalRow));
+                throw std::runtime_error("Null price/size at row " + std::to_string(global_row));
 
             if (a_entry_px->type_id() == arrow::Type::DOUBLE) {
                 out.price =
@@ -321,21 +321,21 @@ struct CoinbaseBTCUSDTParquetSource::Impl {
             }
 
             if (a_order_id->IsNull(r))
-                throw std::runtime_error("Null order_id at row " + std::to_string(globalRow));
+                throw std::runtime_error("Null order_id at row " + std::to_string(global_row));
             if (a_order_id->type_id() == arrow::Type::STRING) {
-                out.orderId = std::string(std::static_pointer_cast<arrow::StringArray>(a_order_id)->GetView(r));
+                out.order_id = std::string(std::static_pointer_cast<arrow::StringArray>(a_order_id)->GetView(r));
             } else {
-                out.orderId = std::string(std::static_pointer_cast<arrow::LargeStringArray>(a_order_id)->GetView(r));
+                out.order_id = std::string(std::static_pointer_cast<arrow::LargeStringArray>(a_order_id)->GetView(r));
             }
 
-            ++globalRow;
+            ++global_row;
             return true;
         }
     }
 };
 
-CoinbaseBTCUSDTParquetSource::CoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batchSizeRows)
-    : impl(std::make_unique<Impl>(std::move(path), batchSizeRows)) {}
+CoinbaseBTCUSDTParquetSource::CoinbaseBTCUSDTParquetSource(std::string path, std::int64_t batch_size_rows)
+    : impl(std::make_unique<Impl>(std::move(path), batch_size_rows)) {}
 
 CoinbaseBTCUSDTParquetSource::~CoinbaseBTCUSDTParquetSource() = default;
 

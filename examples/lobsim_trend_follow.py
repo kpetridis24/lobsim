@@ -46,14 +46,14 @@ def mid_from_engine(engine: PaperTradingSimulator, tick_size: float) -> Tuple[in
 
 def _iter_strategy_trades(sink: InMemoryLogSink):
     """
-    Yield (side, priceTicks, qtyLots) for any fill where STRATEGY participated.
+    Yield (side, price_ticks, qty_lots) for any fill where STRATEGY participated.
     This captures both resting fills and aggressive trades.
     """
     for r in sink.get_fills():
-        if r.makerSource == UpdateSource.STRATEGY:
-            yield r.makerSide, r.priceTicks, r.qtyLots
-        if r.takerSource == UpdateSource.STRATEGY:
-            yield r.takerSide, r.priceTicks, r.qtyLots
+        if r.maker_source == UpdateSource.STRATEGY:
+            yield r.maker_side, r.price_ticks, r.qty_lots
+        if r.taker_source == UpdateSource.STRATEGY:
+            yield r.taker_side, r.price_ticks, r.qty_lots
 
 
 def _render_table(rows: list[dict[str, object]], *, height_px: int) -> None:
@@ -107,7 +107,7 @@ class RiskConfig:
 @dataclass
 class RiskState:
     cfg: RiskConfig
-    last_order_ts: int = 0  # tsReceived (us)
+    last_order_ts: int = 0  # ts_received (us)
     enabled: bool = True
     disabled_reason: str = ""
 
@@ -133,8 +133,8 @@ def _open_orders_summary(
         if state.status not in (PaperOrderLedgerStatus.OPEN, PaperOrderLedgerStatus.PARTIALLY_FILLED):
             continue
 
-        qty_units = state.remainingQty * lot_size
-        px = state.priceTicks * tick_size
+        qty_units = state.remaining_qty * lot_size
+        px = state.price_ticks * tick_size
 
         if state.side == Side.BUY:
             open_buy += 1
@@ -428,19 +428,19 @@ def strategy_tick(
     last_seq = sink.get_events()[-1].seq if sink.get_events() else 0
     for entry in ledger.values():
         if entry.state.status in (PaperOrderLedgerStatus.OPEN, PaperOrderLedgerStatus.PARTIALLY_FILLED):
-            if ttl_events > 0 and last_seq - entry.state.createdSeq >= ttl_events:
+            if ttl_events > 0 and last_seq - entry.state.created_seq >= ttl_events:
                 cancel = NormalizedLobEvent(
-                    tsExchange=current_ts,
-                    tsReceived=current_ts,
+                    ts_exchange=current_ts,
+                    ts_received=current_ts,
                     side=entry.state.side,
-                    updateType=UpdateType.DELETE,
-                    priceTicks=entry.state.priceTicks,
-                    quantityLots=0,
-                    orderId=entry.state.orderId,
-                    traderId=UnknownTraderIdSentinel,
-                    aggressorId=UnknownAggressorIdSentinel,
-                    symbolId=adapter.symbol_id,
-                    updateSource=UpdateSource.STRATEGY,
+                    update_type=UpdateType.DELETE,
+                    price_ticks=entry.state.price_ticks,
+                    quantity_lots=0,
+                    order_id=entry.state.order_id,
+                    trader_id=UnknownTraderIdSentinel,
+                    aggressor_id=UnknownAggressorIdSentinel,
+                    symbol_id=adapter.symbol_id,
+                    update_source=UpdateSource.STRATEGY,
                 )
                 engine.update(cancel)
 
@@ -504,17 +504,17 @@ def strategy_tick(
             price_ticks = best_ask if side == Side.BUY else best_bid
 
         ev = NormalizedLobEvent(
-            tsExchange=current_ts,
-            tsReceived=current_ts,
+            ts_exchange=current_ts,
+            ts_received=current_ts,
             side=side,
-            updateType=update_type,
-            priceTicks=int(price_ticks),
-            quantityLots=int(qty_lots),
-            orderId=next_order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            symbolId=adapter.symbol_id,
-            updateSource=UpdateSource.STRATEGY,
+            update_type=update_type,
+            price_ticks=int(price_ticks),
+            quantity_lots=int(qty_lots),
+            order_id=next_order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            symbol_id=adapter.symbol_id,
+            update_source=UpdateSource.STRATEGY,
         )
         engine.update(ev)
 
@@ -608,7 +608,7 @@ def plot_mid(mid_history: List[Tuple[int, float]]):
     fig.update_layout(
         height=350,
         margin=dict(l=20, r=20, t=30, b=30),
-        xaxis_title="tsReceived (us)",
+        xaxis_title="ts_received (us)",
         yaxis_title="mid",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -637,7 +637,7 @@ def plot_mid_avg(mid_history: List[Tuple[int, float]], *, window: int):
     fig.update_layout(
         height=220,
         margin=dict(l=20, r=20, t=20, b=20),
-        xaxis_title="tsReceived (us)",
+        xaxis_title="ts_received (us)",
         yaxis_title="mid avg",
         title=f"Rolling Mid (window={window})",
     )
@@ -667,27 +667,27 @@ def strategy_orders_table(sink: InMemoryLogSink, *, view: str):
 
     # Aggressive fills show as fills but won't exist in the paper ledger
     for r in sink.get_fills():
-        if r.makerSource == UpdateSource.STRATEGY and r.makerOrderId not in ledger:
+        if r.maker_source == UpdateSource.STRATEGY and r.maker_order_id not in ledger:
             aggressive_rows.append(
                 {
                     "type": "aggressive",
-                    "order_id": r.makerOrderId,
-                    "side": r.makerSide.name,
+                    "order_id": r.maker_order_id,
+                    "side": r.maker_side.name,
                     "status": "FILLED",
-                    "price": round(r.priceTicks * adapter.tick_size, 2),
-                    "qty_filled": round(r.qtyLots * adapter.lot_size, 8),
+                    "price": round(r.price_ticks * adapter.tick_size, 2),
+                    "qty_filled": round(r.qty_lots * adapter.lot_size, 8),
                     "created_seq": r.seq,
                 }
             )
-        if r.takerSource == UpdateSource.STRATEGY and r.takerOrderId not in ledger:
+        if r.taker_source == UpdateSource.STRATEGY and r.taker_order_id not in ledger:
             aggressive_rows.append(
                 {
                     "type": "aggressive",
-                    "order_id": r.takerOrderId,
-                    "side": r.takerSide.name,
+                    "order_id": r.taker_order_id,
+                    "side": r.taker_side.name,
                     "status": "FILLED",
-                    "price": round(r.priceTicks * adapter.tick_size, 2),
-                    "qty_filled": round(r.qtyLots * adapter.lot_size, 8),
+                    "price": round(r.price_ticks * adapter.tick_size, 2),
+                    "qty_filled": round(r.qty_lots * adapter.lot_size, 8),
                     "created_seq": r.seq,
                 }
             )
@@ -705,15 +705,15 @@ def strategy_orders_table(sink: InMemoryLogSink, *, view: str):
         rows.append(
             {
                 "type": "resting",
-                "order_id": state.orderId,
+                "order_id": state.order_id,
                 "side": state.side.name,
                 "status": state.status.name,
-                "price": round(state.priceTicks * adapter.tick_size, 2),
-                "qty_init": round(state.initialQty * adapter.lot_size, 8),
-                "qty_rem": round(state.remainingQty * adapter.lot_size, 8),
-                "qty_filled": round(state.filledQty * adapter.lot_size, 8),
-                "created_seq": state.createdSeq,
-                "last_update_seq": state.lastUpdateSeq,
+                "price": round(state.price_ticks * adapter.tick_size, 2),
+                "qty_init": round(state.initial_qty * adapter.lot_size, 8),
+                "qty_rem": round(state.remaining_qty * adapter.lot_size, 8),
+                "qty_filled": round(state.filled_qty * adapter.lot_size, 8),
+                "created_seq": state.created_seq,
+                "last_update_seq": state.last_update_seq,
             }
         )
 
@@ -735,10 +735,10 @@ def strategy_fills_table(sink: InMemoryLogSink):
             rows.append(
                 {
                     "seq": f.seq,
-                    "order_id": entry.state.orderId,
+                    "order_id": entry.state.order_id,
                     "side": entry.state.side.name,
-                    "price": round(f.priceTicks * adapter.tick_size, 2),
-                    "qty": round(f.qtyLots * adapter.lot_size, 8),
+                    "price": round(f.price_ticks * adapter.tick_size, 2),
+                    "qty": round(f.qty_lots * adapter.lot_size, 8),
                     "role": f.role.name,
                 }
             )
@@ -754,13 +754,13 @@ def recent_events(sink: InMemoryLogSink):
         rows.append(
             {
                 "seq": ev.seq,
-                "ts": ev.tsReceived,
+                "ts": ev.ts_received,
                 "side": ev.side.name,
-                "type": ev.updateType.name,
+                "type": ev.update_type.name,
                 "src": ev.source.name,
-                "price": round(ev.priceTicks * adapter.tick_size, 2),
-                "qty": round(ev.qtyLots * adapter.lot_size, 8),
-                "order": ev.orderId,
+                "price": round(ev.price_ticks * adapter.tick_size, 2),
+                "qty": round(ev.qty_lots * adapter.lot_size, 8),
+                "order": ev.order_id,
             }
         )
     _render_table(rows, height_px=380)
@@ -774,11 +774,11 @@ def recent_fills(sink: InMemoryLogSink):
         rows.append(
             {
                 "seq": r.seq,
-                "ts": r.tsReceived,
-                "price": round(r.priceTicks * adapter.tick_size, 2),
-                "qty": round(r.qtyLots * adapter.lot_size, 8),
-                "maker_src": r.makerSource.name,
-                "taker_src": r.takerSource.name,
+                "ts": r.ts_received,
+                "price": round(r.price_ticks * adapter.tick_size, 2),
+                "qty": round(r.qty_lots * adapter.lot_size, 8),
+                "maker_src": r.maker_source.name,
+                "taker_src": r.taker_source.name,
             }
         )
     _render_table(rows, height_px=380)
@@ -791,7 +791,7 @@ def recent_diagnostics(sink: InMemoryLogSink):
         rows.append(
             {
                 "seq": r.seq,
-                "ts": r.tsReceived,
+                "ts": r.ts_received,
                 "code": r.code,
                 "severity": r.severity,
             }
@@ -870,11 +870,11 @@ def step_events(
         ev = adapter.normalize(raw)
         engine.update(ev)
         applied += 1
-        last_ts = ev.tsReceived
+        last_ts = ev.ts_received
 
         _, mid_price = mid_from_engine(engine, adapter.tick_size)
         if mid_price is not None:
-            mid_history.append((ev.tsReceived, mid_price))
+            mid_history.append((ev.ts_received, mid_price))
 
         if run_strategy and mid_price is not None:
             allow = False
@@ -884,7 +884,7 @@ def step_events(
                 if decision_value > 0 and applied % decision_value == 0:
                     allow = True
             elif decision_mode == "Every N ms":
-                if decision_value > 0 and (ev.tsReceived - last_decision_ts) >= decision_value * 1000:
+                if decision_value > 0 and (ev.ts_received - last_decision_ts) >= decision_value * 1000:
                     allow = True
 
             if allow:
@@ -907,7 +907,7 @@ def step_events(
                     fee_bps=fee_bps,
                 )
                 st.session_state.last_action = action
-                last_decision_ts = ev.tsReceived
+                last_decision_ts = ev.ts_received
 
     if last_ts is not None:
         st.session_state.current_ts = last_ts
@@ -960,11 +960,11 @@ def step_time(
         ev = adapter.normalize(raw)
         engine.update(ev)
         applied += 1
-        last_ts = ev.tsReceived
+        last_ts = ev.ts_received
 
         _, mid_price = mid_from_engine(engine, adapter.tick_size)
         if mid_price is not None:
-            mid_history.append((ev.tsReceived, mid_price))
+            mid_history.append((ev.ts_received, mid_price))
 
         if run_strategy and mid_price is not None:
             allow = False
@@ -974,7 +974,7 @@ def step_time(
                 if decision_value > 0 and applied % decision_value == 0:
                     allow = True
             elif decision_mode == "Every N ms":
-                if decision_value > 0 and (ev.tsReceived - last_decision_ts) >= decision_value * 1000:
+                if decision_value > 0 and (ev.ts_received - last_decision_ts) >= decision_value * 1000:
                     allow = True
 
             if allow:
@@ -997,9 +997,9 @@ def step_time(
                     fee_bps=fee_bps,
                 )
                 st.session_state.last_action = action
-                last_decision_ts = ev.tsReceived
+                last_decision_ts = ev.ts_received
 
-        if ev.tsReceived >= target:
+        if ev.ts_received >= target:
             break
 
     if last_ts is not None:
@@ -1247,7 +1247,7 @@ def main():
             fig.update_layout(
                 height=220,
                 margin=dict(l=20, r=20, t=20, b=20),
-                xaxis_title="tsReceived (us)",
+                xaxis_title="ts_received (us)",
                 yaxis_title="PnL",
                 title="Strategy PnL (realized + unrealized)",
             )

@@ -13,19 +13,19 @@
 namespace lobsim::replay {
 
 struct ReplayConfig {
-    bool requireMonotonicTsReceived{true};
-    bool failFast{true};
+    bool require_monotonic_ts_received{true};
+    bool fail_fast{true};
 };
 
 struct RunSummary {
-    std::uint64_t numRawEvents{0};
-    std::uint64_t numNormalizedEvents{0};
-    std::uint64_t numEngineUpdates{0};
-    std::uint64_t numAdapterFailures{0};
+    std::uint64_t num_raw_events{0};
+    std::uint64_t num_normalized_events{0};
+    std::uint64_t num_engine_updates{0};
+    std::uint64_t num_adapter_failures{0};
 
-    bool hasTsRange{false};
-    std::int64_t firstTsReceived{0};
-    std::int64_t lastTsReceived{0};
+    bool has_ts_range{false};
+    std::int64_t first_ts_received{0};
+    std::int64_t last_ts_received{0};
 };
 
 class ReplaySession {
@@ -33,15 +33,15 @@ public:
     explicit ReplaySession(IMatchingEngine& engine, ReplayConfig cfg = {}) : engine(engine), cfg(cfg) {}
 
     void step(const NormalizedLobEvent& ev) {
-        if (ev.tsReceived < 0) {
-            throw std::runtime_error("ReplaySession: invalid tsReceived (< 0).");
+        if (ev.ts_received < 0) {
+            throw std::runtime_error("ReplaySession: invalid ts_received (< 0).");
         }
 
-        if (cfg.requireMonotonicTsReceived && hasLastTsReceived && ev.tsReceived < lastTsReceived) {
-            throw std::runtime_error("ReplaySession: non-monotonic tsReceived detected.");
+        if (cfg.require_monotonic_ts_received && has_last_ts_received && ev.ts_received < last_ts_received) {
+            throw std::runtime_error("ReplaySession: non-monotonic ts_received detected.");
         }
-        hasLastTsReceived = true;
-        lastTsReceived = ev.tsReceived;
+        has_last_ts_received = true;
+        last_ts_received = ev.ts_received;
 
         engine.update(ev);
     }
@@ -51,22 +51,22 @@ public:
         RunSummary summary{};
 
         for (const auto& ev : events) {
-            ++summary.numNormalizedEvents;
+            ++summary.num_normalized_events;
 
-            if (!summary.hasTsRange) {
-                summary.hasTsRange = true;
-                summary.firstTsReceived = ev.tsReceived;
-                summary.lastTsReceived = ev.tsReceived;
+            if (!summary.has_ts_range) {
+                summary.has_ts_range = true;
+                summary.first_ts_received = ev.ts_received;
+                summary.last_ts_received = ev.ts_received;
             } else {
-                if (ev.tsReceived < summary.firstTsReceived) {
-                    summary.firstTsReceived = ev.tsReceived;
+                if (ev.ts_received < summary.first_ts_received) {
+                    summary.first_ts_received = ev.ts_received;
                 }
-                if (ev.tsReceived > summary.lastTsReceived) {
-                    summary.lastTsReceived = ev.tsReceived;
+                if (ev.ts_received > summary.last_ts_received) {
+                    summary.last_ts_received = ev.ts_received;
                 }
             }
             step(ev);
-            ++summary.numEngineUpdates;
+            ++summary.num_engine_updates;
         }
         return summary;
     }
@@ -79,36 +79,36 @@ public:
 
         RawEvent raw{};
         while (src.next(raw)) {
-            ++summary.numRawEvents;
+            ++summary.num_raw_events;
             NormalizedLobEvent ev{};
 
             try {
                 ev = adapter.normalize(raw);
             } catch (const std::exception&) {
-                ++summary.numAdapterFailures;
-                if (cfg.failFast) {
+                ++summary.num_adapter_failures;
+                if (cfg.fail_fast) {
                     throw;
                 }
                 continue;
             }
 
-            ++summary.numNormalizedEvents;
+            ++summary.num_normalized_events;
 
-            if (!summary.hasTsRange) {
-                summary.hasTsRange = true;
-                summary.firstTsReceived = ev.tsReceived;
-                summary.lastTsReceived = ev.tsReceived;
+            if (!summary.has_ts_range) {
+                summary.has_ts_range = true;
+                summary.first_ts_received = ev.ts_received;
+                summary.last_ts_received = ev.ts_received;
             } else {
-                if (ev.tsReceived < summary.firstTsReceived) {
-                    summary.firstTsReceived = ev.tsReceived;
+                if (ev.ts_received < summary.first_ts_received) {
+                    summary.first_ts_received = ev.ts_received;
                 }
-                if (ev.tsReceived > summary.lastTsReceived) {
-                    summary.lastTsReceived = ev.tsReceived;
+                if (ev.ts_received > summary.last_ts_received) {
+                    summary.last_ts_received = ev.ts_received;
                 }
             }
             step(ev);
 
-            ++summary.numEngineUpdates;
+            ++summary.num_engine_updates;
         }
         return summary;
     }
@@ -116,8 +116,8 @@ public:
 private:
     IMatchingEngine& engine;
     ReplayConfig cfg{};
-    bool hasLastTsReceived{false};
-    std::int64_t lastTsReceived{0};
+    bool has_last_ts_received{false};
+    std::int64_t last_ts_received{0};
 };
 
 } // namespace lobsim::replay

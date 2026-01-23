@@ -226,17 +226,17 @@ class Adapter:
             out_qty = new_qty
 
         return NormalizedLobEvent(
-            tsExchange=raw.ts_exchange_us,
-            tsReceived=raw.ts_received_us,
+            ts_exchange=raw.ts_exchange_us,
+            ts_received=raw.ts_received_us,
             side=side,
-            updateType=out_type,
-            priceTicks=price_ticks,
-            quantityLots=out_qty,
-            orderId=level_order_id(self.symbol_id, side, price_ticks),
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            symbolId=self.symbol_id,
-            updateSource=UpdateSource.HISTORICAL,
+            update_type=out_type,
+            price_ticks=price_ticks,
+            quantity_lots=out_qty,
+            order_id=level_order_id(self.symbol_id, side, price_ticks),
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            symbol_id=self.symbol_id,
+            update_source=UpdateSource.HISTORICAL,
         )
 
     def normalize(self, raw: RawEvent) -> NormalizedLobEvent:
@@ -253,17 +253,17 @@ class Adapter:
             if not self._l2_missing_ids:
                 order_id = stable_int64(str(order_id_raw))
                 return NormalizedLobEvent(
-                    tsExchange=raw.ts_exchange_us,
-                    tsReceived=raw.ts_received_us,
+                    ts_exchange=raw.ts_exchange_us,
+                    ts_received=raw.ts_received_us,
                     side=side,
-                    updateType=update_type,
-                    priceTicks=price_ticks,
-                    quantityLots=qty_lots,
-                    orderId=order_id,
-                    traderId=UnknownTraderIdSentinel,
-                    aggressorId=UnknownAggressorIdSentinel,
-                    symbolId=self.symbol_id,
-                    updateSource=UpdateSource.HISTORICAL,
+                    update_type=update_type,
+                    price_ticks=price_ticks,
+                    quantity_lots=qty_lots,
+                    order_id=order_id,
+                    trader_id=UnknownTraderIdSentinel,
+                    aggressor_id=UnknownAggressorIdSentinel,
+                    symbol_id=self.symbol_id,
+                    update_source=UpdateSource.HISTORICAL,
                 )
             return self._normalize_l2(
                 raw=raw,
@@ -276,17 +276,17 @@ class Adapter:
         order_id = stable_int64(str(order_id_raw))
 
         return NormalizedLobEvent(
-            tsExchange=raw.ts_exchange_us,
-            tsReceived=raw.ts_received_us,
+            ts_exchange=raw.ts_exchange_us,
+            ts_received=raw.ts_received_us,
             side=side,
-            updateType=update_type,
-            priceTicks=price_ticks,
-            quantityLots=qty_lots,
-            orderId=order_id,
-            traderId=UnknownTraderIdSentinel,
-            aggressorId=UnknownAggressorIdSentinel,
-            symbolId=self.symbol_id,
-            updateSource=UpdateSource.HISTORICAL,
+            update_type=update_type,
+            price_ticks=price_ticks,
+            quantity_lots=qty_lots,
+            order_id=order_id,
+            trader_id=UnknownTraderIdSentinel,
+            aggressor_id=UnknownAggressorIdSentinel,
+            symbol_id=self.symbol_id,
+            update_source=UpdateSource.HISTORICAL,
         )
 
 
