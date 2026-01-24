@@ -8,6 +8,7 @@
 #include <list>
 #include <optional>
 #include <queue>
+#include <span>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -19,11 +20,11 @@ public:
 
     virtual void update(const NormalizedLobEvent& event) = 0;
 
-    virtual void init_from_l2_snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-                                       const std::vector<std::int64_t>& quantities) = 0;
+    virtual void init_from_l2_snapshot(std::span<const Side> sides, std::span<const std::int64_t> prices,
+                                       std::span<const std::int64_t> quantities) = 0;
 
-    virtual void init_from_l3_snapshot(const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-                                       const std::vector<std::int64_t>& quantities,
-                                       const std::vector<std::int64_t>& order_ids,
-                                       const std::vector<std::int64_t>& trader_ids) = 0;
+    virtual void init_from_l3_snapshot(std::span<const Side> sides, std::span<const std::int64_t> prices,
+                                       std::span<const std::int64_t> quantities,
+                                       std::span<const std::int64_t> order_ids,
+                                       std::span<const std::int64_t> trader_ids) = 0;
 };

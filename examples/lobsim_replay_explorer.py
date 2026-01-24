@@ -17,20 +17,15 @@ from lobsim.demo_utils import (
     ParquetStream,
     find_snapshot_path,
     load_l3_snapshot,
-    parse_update_type,
-    to_ticks,
 )
 from lobsim.lob_event import NormalizedLobEvent
 from lobsim.multibook import Config, MultiBookSimulator
 from lobsim.sink import InMemoryMultiLogSink
 from lobsim.types import (
-    DiagnosticRecordCode,
-    DiagnosticRecordSeverity,
     diagnostic_code_names,
     diagnostic_severity_names,
     Side,
     UnknownAggressorIdSentinel,
-    UnknownTraderIdSentinel,
     UpdateSource,
     UpdateType,
 )
@@ -60,9 +55,7 @@ DIAG_SEVERITY_NAMES = diagnostic_severity_names()
 
 
 def _safe_int(value: int) -> str | int:
-    if value > (2**53 - 1) or value < -(2**53 - 1):
-        return str(value)
-    return value
+    return str(value) if value > (2**53 - 1) or value < -(2**53 - 1) else value
 
 
 def _price_from_ticks(ticks: int) -> float:
@@ -90,52 +83,50 @@ def _format_levels(levels: list[tuple[int, int]]) -> list[dict[str, object]]:
 
 
 def _format_event_rows(events: list[object]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for ev in events:
-        rows.append(
-            {
-                "seq": ev.seq,
-                "ts_exchange": _safe_int(ev.ts_exchange),
-                "ts_received": _safe_int(ev.ts_received),
-                "side": _enum_label(ev.side),
-                "update_type": _enum_label(ev.update_type),
-                "source": _enum_label(ev.source),
-                "price": _price_from_ticks(ev.price_ticks),
-                "qty": _qty_from_lots(ev.qty_lots),
-                "price_ticks": ev.price_ticks,
-                "qty_lots": ev.qty_lots,
-                "order_id": str(ev.order_id),
-                "trader_id": str(ev.trader_id),
-                "aggressor_id": str(ev.aggressor_id),
-                "book": ev.book_key,
-            }
-        )
+    rows: list[dict[str, object]] = [
+        {
+            "seq": ev.seq,
+            "ts_exchange": _safe_int(ev.ts_exchange),
+            "ts_received": _safe_int(ev.ts_received),
+            "side": _enum_label(ev.side),
+            "update_type": _enum_label(ev.update_type),
+            "source": _enum_label(ev.source),
+            "price": _price_from_ticks(ev.price_ticks),
+            "qty": _qty_from_lots(ev.qty_lots),
+            "price_ticks": ev.price_ticks,
+            "qty_lots": ev.qty_lots,
+            "order_id": str(ev.order_id),
+            "trader_id": str(ev.trader_id),
+            "aggressor_id": str(ev.aggressor_id),
+            "book": ev.book_key,
+        }
+        for ev in events
+    ]
     return rows
 
 
 def _format_fill_rows(fills: list[object]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for fill in fills:
-        rows.append(
-            {
-                "seq": fill.seq,
-                "ts_exchange": _safe_int(fill.ts_exchange),
-                "ts_received": _safe_int(fill.ts_received),
-                "price": _price_from_ticks(fill.price_ticks),
-                "qty": _qty_from_lots(fill.qty_lots),
-                "price_ticks": fill.price_ticks,
-                "qty_lots": fill.qty_lots,
-                "maker_side": _enum_label(fill.maker_side),
-                "maker_order_id": str(fill.maker_order_id),
-                "maker_trader_id": str(fill.maker_trader_id),
-                "maker_source": _enum_label(fill.maker_source),
-                "taker_side": _enum_label(fill.taker_side),
-                "taker_order_id": str(fill.taker_order_id),
-                "taker_trader_id": str(fill.taker_trader_id),
-                "taker_source": _enum_label(fill.taker_source),
-                "book": fill.book_key,
-            }
-        )
+    rows: list[dict[str, object]] = [
+        {
+            "seq": fill.seq,
+            "ts_exchange": _safe_int(fill.ts_exchange),
+            "ts_received": _safe_int(fill.ts_received),
+            "price": _price_from_ticks(fill.price_ticks),
+            "qty": _qty_from_lots(fill.qty_lots),
+            "price_ticks": fill.price_ticks,
+            "qty_lots": fill.qty_lots,
+            "maker_side": _enum_label(fill.maker_side),
+            "maker_order_id": str(fill.maker_order_id),
+            "maker_trader_id": str(fill.maker_trader_id),
+            "maker_source": _enum_label(fill.maker_source),
+            "taker_side": _enum_label(fill.taker_side),
+            "taker_order_id": str(fill.taker_order_id),
+            "taker_trader_id": str(fill.taker_trader_id),
+            "taker_source": _enum_label(fill.taker_source),
+            "book": fill.book_key,
+        }
+        for fill in fills
+    ]
     return rows
 
 
@@ -173,7 +164,7 @@ def _format_strategy_order_rows(
     ledger: dict[int, object], *, view: str, book_key: str
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for _, entry in ledger.items():
+    for entry in ledger.values():
         state = entry.state
         status_label = _enum_label(state.status)
         is_active = status_label in ("OPEN", "PARTIALLY_FILLED")

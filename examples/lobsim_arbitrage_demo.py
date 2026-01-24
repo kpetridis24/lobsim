@@ -5,7 +5,7 @@ import sys
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import streamlit as st
 from plotly import graph_objects as go
@@ -21,8 +21,6 @@ from lobsim.lob_event import NormalizedLobEvent
 from lobsim.multibook import Config, MultiBookSimulator
 from lobsim.sink import InMemoryMultiLogSink, PaperOrderLedgerStatus
 from lobsim.types import (
-    DiagnosticRecordCode,
-    DiagnosticRecordSeverity,
     diagnostic_code_names,
     diagnostic_severity_names,
     Side,
@@ -118,9 +116,7 @@ DIAG_SEVERITY_NAMES = diagnostic_severity_names()
 
 
 def _safe_int(value: int) -> str | int:
-    if value > (2**53 - 1) or value < -(2**53 - 1):
-        return str(value)
-    return value
+    return str(value) if value > (2**53 - 1) or value < -(2**53 - 1) else value
 
 
 def _price_from_ticks(book_key: str, ticks: int) -> float:
@@ -158,9 +154,7 @@ def _compute_imbalance(window: deque[float]) -> float:
     if not window:
         return 0.0
     total = sum(abs(x) for x in window)
-    if total == 0:
-        return 0.0
-    return sum(window) / total
+    return 0.0 if total == 0 else sum(window) / total
 
 
 def _format_specs_table() -> list[dict[str, object]]:
@@ -183,48 +177,46 @@ def _format_specs_table() -> list[dict[str, object]]:
 
 
 def _format_event_rows(events: list[object]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for ev in events:
-        rows.append(
-            {
-                "seq": ev.seq,
-                "ts_exchange": _safe_int(ev.ts_exchange),
-                "ts_received": _safe_int(ev.ts_received),
-                "side": ev.side.name,
-                "update_type": ev.update_type.name,
-                "source": ev.source.name,
-                "price": _price_from_ticks(ev.book_key, ev.price_ticks),
-                "qty": _qty_from_lots(ev.book_key, ev.qty_lots),
-                "price_ticks": ev.price_ticks,
-                "qty_lots": ev.qty_lots,
-                "order_id": str(ev.order_id),
-                "book": ev.book_key,
-            }
-        )
+    rows: list[dict[str, object]] = [
+        {
+            "seq": ev.seq,
+            "ts_exchange": _safe_int(ev.ts_exchange),
+            "ts_received": _safe_int(ev.ts_received),
+            "side": ev.side.name,
+            "update_type": ev.update_type.name,
+            "source": ev.source.name,
+            "price": _price_from_ticks(ev.book_key, ev.price_ticks),
+            "qty": _qty_from_lots(ev.book_key, ev.qty_lots),
+            "price_ticks": ev.price_ticks,
+            "qty_lots": ev.qty_lots,
+            "order_id": str(ev.order_id),
+            "book": ev.book_key,
+        }
+        for ev in events
+    ]
     return rows
 
 
 def _format_fill_rows(fills: list[object]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for fill in fills:
-        rows.append(
-            {
-                "seq": fill.seq,
-                "ts_exchange": _safe_int(fill.ts_exchange),
-                "ts_received": _safe_int(fill.ts_received),
-                "price": _price_from_ticks(fill.book_key, fill.price_ticks),
-                "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
-                "price_ticks": fill.price_ticks,
-                "qty_lots": fill.qty_lots,
-                "maker_side": fill.maker_side.name,
-                "maker_source": fill.maker_source.name,
-                "taker_side": fill.taker_side.name,
-                "taker_source": fill.taker_source.name,
-                "maker_order_id": str(fill.maker_order_id),
-                "taker_order_id": str(fill.taker_order_id),
-                "book": fill.book_key,
-            }
-        )
+    rows: list[dict[str, object]] = [
+        {
+            "seq": fill.seq,
+            "ts_exchange": _safe_int(fill.ts_exchange),
+            "ts_received": _safe_int(fill.ts_received),
+            "price": _price_from_ticks(fill.book_key, fill.price_ticks),
+            "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
+            "price_ticks": fill.price_ticks,
+            "qty_lots": fill.qty_lots,
+            "maker_side": fill.maker_side.name,
+            "maker_source": fill.maker_source.name,
+            "taker_side": fill.taker_side.name,
+            "taker_source": fill.taker_source.name,
+            "maker_order_id": str(fill.maker_order_id),
+            "taker_order_id": str(fill.taker_order_id),
+            "book": fill.book_key,
+        }
+        for fill in fills
+    ]
     return rows
 
 
@@ -593,9 +585,7 @@ def step_time(
     base = sim.current_time() or 0
     target = base + delta_ms * 1000
     applied = 0
-    while True:
-        if not sim.step():
-            break
+    while sim.step():
         applied += 1
         st.session_state.global_steps += 1
         _process_new_records()
@@ -676,23 +666,22 @@ def _plot_arb_edges() -> None:
 
 def _strategy_fills_table() -> None:
     sink: InMemoryMultiLogSink = st.session_state.sink
-    rows = []
-    for fill in sink.fills():
-        if fill.maker_source != UpdateSource.STRATEGY and fill.taker_source != UpdateSource.STRATEGY:
-            continue
-        rows.append(
-            {
-                "seq": fill.seq,
-                "ts_received": _safe_int(fill.ts_received),
-                "book": fill.book_key,
-                "price": _price_from_ticks(fill.book_key, fill.price_ticks),
-                "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
-                "maker_source": fill.maker_source.name,
-                "taker_source": fill.taker_source.name,
-                "maker_side": fill.maker_side.name,
-                "taker_side": fill.taker_side.name,
-            }
-        )
+    rows = [
+        {
+            "seq": fill.seq,
+            "ts_received": _safe_int(fill.ts_received),
+            "book": fill.book_key,
+            "price": _price_from_ticks(fill.book_key, fill.price_ticks),
+            "qty": _qty_from_lots(fill.book_key, fill.qty_lots),
+            "maker_source": fill.maker_source.name,
+            "taker_source": fill.taker_source.name,
+            "maker_side": fill.maker_side.name,
+            "taker_side": fill.taker_side.name,
+        }
+        for fill in sink.fills()
+        if fill.maker_source == UpdateSource.STRATEGY
+        or fill.taker_source == UpdateSource.STRATEGY
+    ]
     rows = rows[-100:]
     _render_table(rows[::-1], height_px=260)
 

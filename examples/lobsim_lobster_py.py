@@ -4,7 +4,7 @@ import csv
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence
+from typing import Iterator, Sequence
 
 from lobsim.engine import PaperTradingSimulator
 from lobsim.lob_event import NormalizedLobEvent

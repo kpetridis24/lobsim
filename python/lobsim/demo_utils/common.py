@@ -29,7 +29,7 @@ def parse_update_type(value: str) -> UpdateType:
         return UpdateType.DELETE
     if s == "MATCH":
         return UpdateType.MATCH
-    if s in ("SUBTRACT", "SUB"):
+    if s in {"SUBTRACT", "SUB"}:
         return UpdateType.SUBTRACT
     if s == "SET":
         return UpdateType.SET
@@ -49,7 +49,7 @@ def parse_time_us(v) -> int:
         if ":" in v:
             hh, mm, rest = v.split(":")
             ss, frac = (rest.split(".") + ["0"])[:2]
-            frac = (frac + "000000")[:6]
+            frac = f"{frac}000000"[:6]
             return (
                 int(hh) * 3600_000_000
                 + int(mm) * 60_000_000
@@ -82,7 +82,7 @@ def _is_missing_order_id(value) -> bool:
     if value is None:
         return True
     s = str(value).strip()
-    return s == "" or s.lower() in ("none", "nan")
+    return not s or s.lower() in {"none", "nan"}
 
 
 def level_order_id(symbol_id: str, side: Side, price_ticks: int) -> int:
@@ -109,12 +109,12 @@ class ParquetStream:
             (n for n in schema_names if n in ("time_received", "time_feed")), None
         )
         if recv_col is None:
-            candidates = [
+            if candidates := [
                 n for n in schema_names if "time" in n and "exchange" not in n
-            ]
-            if not candidates:
+            ]:
+                recv_col = candidates[0]
+            else:
                 raise ValueError("No received time column found")
-            recv_col = candidates[0]
         self._recv_col = recv_col
         self._cols = [
             "time_exchange",
@@ -204,9 +204,7 @@ class Adapter:
             new_qty = 0
         elif update_type == UpdateType.SET:
             new_qty = qty_lots
-        if new_qty < 0:
-            new_qty = 0
-
+        new_qty = max(new_qty, 0)
         if new_qty > 0:
             self._l2_levels[key] = new_qty
         else:
@@ -294,9 +292,7 @@ def find_snapshot_path(data_path: Path) -> Path | None:
     if data_path.name.endswith("_snap.parquet") and data_path.exists():
         return data_path
     candidate = data_path.with_name(f"{data_path.stem}_snap{data_path.suffix}")
-    if candidate.exists():
-        return candidate
-    return None
+    return candidate if candidate.exists() else None
 
 
 def load_l3_snapshot(
@@ -310,8 +306,7 @@ def load_l3_snapshot(
 ):
     cols = ["update_type", "is_buy", "entry_px", "entry_sx", "order_id"]
     pf = pq.ParquetFile(str(path))
-    missing = [name for name in cols if name not in pf.schema.names]
-    if missing:
+    if missing := [name for name in cols if name not in pf.schema.names]:
         raise ValueError(f"snapshot parquet missing columns: {missing}")
 
     sides: list[Side] = []

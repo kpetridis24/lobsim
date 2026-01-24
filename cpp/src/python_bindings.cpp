@@ -9,6 +9,7 @@
 #include "lobsim/types.hpp"
 
 #include <optional>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <span>
@@ -18,6 +19,7 @@
 
 // CHANGE THIS include to your actual sink header
 #include "lobsim/in_memory_sink.hpp"
+#include "lobsim/metrics_sink.hpp"
 
 namespace py = pybind11;
 
@@ -158,6 +160,20 @@ PYBIND11_MODULE(_core, m) {
     py::enum_<UpdateSource>(types, "UpdateSource")
         .value("HISTORICAL", UpdateSource::HISTORICAL)
         .value("STRATEGY", UpdateSource::STRATEGY);
+
+    py::enum_<LatencyModelType>(types, "LatencyModelType")
+        .value("FIXED", LatencyModelType::FIXED)
+        .value("UNIFORM", LatencyModelType::UNIFORM)
+        .value("LOGNORMAL", LatencyModelType::LOGNORMAL);
+
+    py::class_<LatencyModel>(types, "LatencyModel")
+        .def(py::init([](LatencyModelType type, double p1, double p2) {
+                 return LatencyModel{type, p1, p2};
+             }),
+             py::arg("type") = LatencyModelType::FIXED, py::arg("param1") = 0.0, py::arg("param2") = 0.0)
+        .def_readwrite("type", &LatencyModel::type)
+        .def_readwrite("param1", &LatencyModel::param1)
+        .def_readwrite("param2", &LatencyModel::param2);
 
     py::enum_<DiagnosticRecordCode>(types, "DiagnosticRecordCode")
         .value("ADD_DUPLICATE_ORDER_ID", DiagnosticRecordCode::ADD_DUPLICATE_ORDER_ID)
@@ -497,7 +513,10 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("state", &PaperOrderLedgerEntry::state)
         .def_readonly("fills", &PaperOrderLedgerEntry::fills);
 
-    py::class_<InMemoryLogSink>(m, "InMemoryLogSink")
+    // ILogSink Interface
+    py::class_<ILogSink, std::shared_ptr<ILogSink>>(m, "ILogSink");
+
+    py::class_<InMemoryLogSink, std::shared_ptr<InMemoryLogSink>, ILogSink>(m, "InMemoryLogSink")
         .def(py::init<>())
         .def("reset", &InMemoryLogSink::reset)
         .def("get_fills", [](const InMemoryLogSink& s) { return s.get_fills(); })
@@ -513,7 +532,7 @@ PYBIND11_MODULE(_core, m) {
              })
         .def("get_rejected_strategy_events", [](const InMemoryLogSink& s) { return s.get_rejected_strategy_events(); });
 
-    py::class_<InMemoryMultiLogSink>(m, "InMemoryMultiLogSink")
+    py::class_<InMemoryMultiLogSink, std::shared_ptr<InMemoryMultiLogSink>>(m, "InMemoryMultiLogSink")
         .def(py::init<>())
         .def("reset", &InMemoryMultiLogSink::reset)
         .def("fills", [](const InMemoryMultiLogSink& s) { return s.fills(); })
@@ -537,25 +556,40 @@ PYBIND11_MODULE(_core, m) {
         .def("rejected_strategy_events_for",
              [](const InMemoryMultiLogSink& s, const std::string& key) { return s.rejected_strategy_events_for(key); });
 
+    py::class_<lobsim::MetricsRecord>(m, "MetricsRecord")
+        .def_readonly("seq", &lobsim::MetricsRecord::seq)
+        .def_readonly("ts_exchange", &lobsim::MetricsRecord::ts_exchange)
+        .def_readonly("ts_received", &lobsim::MetricsRecord::ts_received)
+        .def_readonly("best_bid", &lobsim::MetricsRecord::best_bid)
+        .def_readonly("best_ask", &lobsim::MetricsRecord::best_ask)
+        .def_readonly("mid_price", &lobsim::MetricsRecord::mid_price)
+        .def_readonly("spread", &lobsim::MetricsRecord::spread)
+        .def_readonly("imbalance", &lobsim::MetricsRecord::imbalance);
+
+    py::class_<lobsim::MetricsSink, std::shared_ptr<lobsim::MetricsSink>, ILogSink>(m, "MetricsSink")
+        .def(py::init<const PaperTradingSimulator&>(), py::arg("engine"), py::keep_alive<1, 2>())
+        .def("reset", &lobsim::MetricsSink::reset)
+        .def("get_metrics", &lobsim::MetricsSink::get_metrics);
+
     // Engine bindings
     py::class_<PaperTradingSimulator>(m, "PaperTradingSimulator")
         .def(py::init<>())
         .def(py::init([](const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-                         const std::vector<std::int64_t>& quantities, InMemoryLogSink* sink) {
+                         const std::vector<std::int64_t>& quantities, std::shared_ptr<InMemoryLogSink> sink) {
                  PaperTradingSimulator eng;
-                 if (sink != nullptr) {
-                     eng.set_log_sink(sink);
+                 if (sink) {
+                     eng.set_log_sink(std::move(sink));
                  }
                  eng.init_from_l2_snapshot(sides, prices, quantities);
                  return eng;
              }),
-             py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("sink") = nullptr,
-             py::keep_alive<1, 5>())
+             py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("sink") = nullptr)
 
         // Ensure sink lifetime: sink stays alive as long as engine lives (Python-side).
         .def(
-            "set_log_sink", [](PaperTradingSimulator& eng, InMemoryLogSink& sink) { eng.set_log_sink(&sink); },
-            py::arg("sink"), py::keep_alive<1, 2>())
+            "set_log_sink",
+            [](PaperTradingSimulator& eng, std::shared_ptr<ILogSink> sink) { eng.set_log_sink(std::move(sink)); },
+            py::arg("sink"))
 
         // Apply a NormalizedLobEvent directly
         .def(
@@ -564,18 +598,29 @@ PYBIND11_MODULE(_core, m) {
 
         .def(
             "init_from_l2_snapshot",
-            [](PaperTradingSimulator& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-               const std::vector<std::int64_t>& quantities) { eng.init_from_l2_snapshot(sides, prices, quantities); },
+            [](PaperTradingSimulator& eng, py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> sides,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> prices,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> quantities) {
+                eng.init_from_l2_snapshot(std::span<const Side>(reinterpret_cast<const Side*>(sides.data()), sides.size()),
+                                          std::span<const std::int64_t>(prices.data(), prices.size()),
+                                          std::span<const std::int64_t>(quantities.data(), quantities.size()));
+            },
             py::arg("sides"), py::arg("prices"), py::arg("quantities"))
 
         .def(
             "init_from_l3_snapshot",
-            [](PaperTradingSimulator& eng, const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
-               const std::vector<std::int64_t>& quantities, const std::vector<std::int64_t>& order_ids,
-               const std::vector<std::int64_t>& trader_ids) {
-                eng.init_from_l3_snapshot(sides, prices, quantities, order_ids, trader_ids);
+            [](PaperTradingSimulator& eng, py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> sides,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> prices,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> quantities,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> order_ids,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> trader_ids) {
+                eng.init_from_l3_snapshot(std::span<const Side>(reinterpret_cast<const Side*>(sides.data()), sides.size()),
+                                          std::span<const std::int64_t>(prices.data(), prices.size()),
+                                          std::span<const std::int64_t>(quantities.data(), quantities.size()),
+                                          std::span<const std::int64_t>(order_ids.data(), order_ids.size()),
+                                          std::span<const std::int64_t>(trader_ids.data(), trader_ids.size()));
             },
-            py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("order_ids"), py::arg("trader_ids"))
+            py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("order_id"), py::arg("trader_id"))
 
         .def("depth_at", &PaperTradingSimulator::depth_at, py::arg("side"), py::arg("price_ticks"))
 
@@ -587,15 +632,20 @@ PYBIND11_MODULE(_core, m) {
     auto multibook = m.def_submodule("multibook", "Multi-book simulator");
 
     py::class_<MultiBookSimulator::Config>(multibook, "Config")
-        .def(py::init([](bool require_monotonic_ts_received, bool fail_fast) {
+        .def(py::init([](bool require_monotonic_ts_received, bool fail_fast, LatencyModel latency_model, std::uint64_t seed) {
                  MultiBookSimulator::Config cfg{};
                  cfg.require_monotonic_ts_received = require_monotonic_ts_received;
                  cfg.fail_fast = fail_fast;
+                 cfg.latency_model = latency_model;
+                 cfg.seed = seed;
                  return cfg;
              }),
-             py::arg("require_monotonic_ts_received") = true, py::arg("fail_fast") = true)
+             py::arg("require_monotonic_ts_received") = true, py::arg("fail_fast") = true,
+             py::arg("latency_model") = LatencyModel{}, py::arg("seed") = 42)
         .def_readwrite("require_monotonic_ts_received", &MultiBookSimulator::Config::require_monotonic_ts_received)
-        .def_readwrite("fail_fast", &MultiBookSimulator::Config::fail_fast);
+        .def_readwrite("fail_fast", &MultiBookSimulator::Config::fail_fast)
+        .def_readwrite("latency_model", &MultiBookSimulator::Config::latency_model)
+        .def_readwrite("seed", &MultiBookSimulator::Config::seed);
 
     py::class_<PyMultiBookWrapper>(multibook, "MultiBookSimulator")
         .def(py::init<const MultiBookSimulator::Config&>(), py::arg("config") = MultiBookSimulator::Config{})
@@ -606,12 +656,16 @@ PYBIND11_MODULE(_core, m) {
             py::arg("book_id"))
         .def(
             "set_log_sink",
-            [](PyMultiBookWrapper& w, const BookId& id, InMemoryLogSink& sink) { w.sim.set_log_sink(id, &sink); },
-            py::arg("book_id"), py::arg("sink"), py::keep_alive<1, 3>())
+            [](PyMultiBookWrapper& w, const BookId& id, std::shared_ptr<InMemoryLogSink> sink) {
+                w.sim.set_log_sink(id, std::move(sink));
+            },
+            py::arg("book_id"), py::arg("sink"))
         .def(
             "set_multi_log_sink",
-            [](PyMultiBookWrapper& w, InMemoryMultiLogSink& sink) { w.sim.set_multi_log_sink(&sink); }, py::arg("sink"),
-            py::keep_alive<1, 2>())
+            [](PyMultiBookWrapper& w, std::shared_ptr<InMemoryMultiLogSink> sink) {
+                w.sim.set_multi_log_sink(std::move(sink));
+            },
+            py::arg("sink"))
         .def(
             "add_normalized_stream",
             [](PyMultiBookWrapper& w, const BookId& id, std::vector<NormalizedLobEvent> events) {
@@ -638,20 +692,33 @@ PYBIND11_MODULE(_core, m) {
             py::arg("book_id"), py::arg("source"), py::arg("adapter") = py::none())
         .def(
             "init_from_l2_snapshot",
-            [](PyMultiBookWrapper& w, const BookId& id, const std::vector<Side>& sides,
-               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities) {
-                w.sim.init_from_l2_snapshot(id, sides, prices, quantities);
+            [](PyMultiBookWrapper& w, const BookId& id,
+               py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> sides,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> prices,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> quantities) {
+                w.sim.get_book(id)->init_from_l2_snapshot(
+                    std::span<const Side>(reinterpret_cast<const Side*>(sides.data()), sides.size()),
+                    std::span<const std::int64_t>(prices.data(), prices.size()),
+                    std::span<const std::int64_t>(quantities.data(), quantities.size()));
             },
             py::arg("book_id"), py::arg("sides"), py::arg("prices"), py::arg("quantities"))
         .def(
             "init_from_l3_snapshot",
-            [](PyMultiBookWrapper& w, const BookId& id, const std::vector<Side>& sides,
-               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities,
-               const std::vector<std::int64_t>& order_ids, const std::vector<std::int64_t>& trader_ids) {
-                w.sim.init_from_l3_snapshot(id, sides, prices, quantities, order_ids, trader_ids);
+            [](PyMultiBookWrapper& w, const BookId& id,
+               py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> sides,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> prices,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> quantities,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> order_ids,
+               py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> trader_ids) {
+                w.sim.get_book(id)->init_from_l3_snapshot(
+                    std::span<const Side>(reinterpret_cast<const Side*>(sides.data()), sides.size()),
+                    std::span<const std::int64_t>(prices.data(), prices.size()),
+                    std::span<const std::int64_t>(quantities.data(), quantities.size()),
+                    std::span<const std::int64_t>(order_ids.data(), order_ids.size()),
+                    std::span<const std::int64_t>(trader_ids.data(), trader_ids.size()));
             },
-            py::arg("book_id"), py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("order_ids"),
-            py::arg("trader_ids"))
+            py::arg("book_id"), py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("order_id"),
+            py::arg("trader_id"))
         .def(
             "apply", [](PyMultiBookWrapper& w, const BookId& id, const NormalizedLobEvent& ev) { w.sim.apply(id, ev); },
             py::arg("book_id"), py::arg("event"))

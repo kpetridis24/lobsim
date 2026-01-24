@@ -6,6 +6,7 @@ project(lobsim VERSION 0.1.0 LANGUAGES CXX)
 option(LOBSIM_BUILD_TESTS  "Build C++ unit tests" ON)
 option(LOBSIM_BUILD_PYTHON "Build Python extension module" ON)
 option(LOBSIM_SHARED_CORE  "Build lobsim_core as a shared library" OFF)
+option(LOBSIM_BUILD_PARQUET "Build Parquet/Arrow support" OFF)
 
 # ---- C++ standard / global settings ----
 set(CMAKE_CXX_STANDARD 20)
@@ -18,15 +19,36 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(GNUInstallDirs)
 
 # ---- Dependencies ----
-find_package(ZLIB REQUIRED)
-find_package(Arrow CONFIG REQUIRED)
-find_package(Parquet CONFIG REQUIRED)
+include(FetchContent)
+
+# Try to find ZLIB, or fetch it if missing (common on Windows)
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+  message(STATUS "ZLIB not found, fetching via FetchContent...")
+  FetchContent_Declare(
+    ZLIB
+    GIT_REPOSITORY https://github.com/madler/zlib.git
+    GIT_TAG        v1.3
+  )
+  FetchContent_MakeAvailable(ZLIB)
+  
+  # Alias for compatibility if needed
+  if(NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB ALIAS zlibstatic)
+  endif()
+endif()
+
+if(LOBSIM_BUILD_PARQUET)
+  find_package(Arrow CONFIG REQUIRED)
+  find_package(Parquet CONFIG REQUIRED)
+endif()
 
 # ---- Core library: lobsim_core ----
 # List sources explicitly (recommended). Add more files as you implement.
 set(LOBSIM_CORE_SOURCES
   cpp/src/paper_trading_simulator.cpp
   cpp/src/in_memory_sink.cpp
+  cpp/src/metrics_sink.cpp
 )
 
 add_library(lobsim_core ${LOBSIM_CORE_SOURCES})
@@ -58,28 +80,37 @@ target_compile_definitions(lobsim_core PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}
 # (Keep lobsim_core free of heavy IO deps like Arrow/Parquet.)
 
 # ---- Arrow/Parquet IO library (optional for Python users) ----
-add_library(lobsim_parquet
-  cpp/src/coinbase_btcusdt_parquet_source.cpp
-)
-add_library(lobsim::parquet ALIAS lobsim_parquet)
+if(LOBSIM_BUILD_PARQUET)
+  add_library(lobsim_parquet
+    cpp/src/coinbase_btcusdt_parquet_source.cpp
+  )
+  add_library(lobsim::parquet ALIAS lobsim_parquet)
 
-target_include_directories(lobsim_parquet
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-)
+  target_include_directories(lobsim_parquet
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
+      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  )
 
-if(MSVC)
-  target_compile_options(lobsim_parquet PRIVATE /W4 /permissive-)
-else()
-  target_compile_options(lobsim_parquet PRIVATE -Wall -Wextra -Wpedantic)
+  if(MSVC)
+    target_compile_options(lobsim_parquet PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(lobsim_parquet PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+
+  target_compile_definitions(lobsim_parquet PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}")
+  target_link_libraries(lobsim_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
+  
+  install(TARGETS lobsim_parquet
+    EXPORT lobsimTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
 endif()
 
-target_compile_definitions(lobsim_parquet PUBLIC LOBSIM_VERSION="${PROJECT_VERSION}")
-target_link_libraries(lobsim_parquet PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
-
 # ---- Install rules for C++ consumers ----
-install(TARGETS lobsim_core lobsim_parquet
+install(TARGETS lobsim_core
   EXPORT lobsimTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -97,6 +128,7 @@ install(EXPORT lobsimTargets
 
 # ---- Tests (Catch2) ----
 if(LOBSIM_BUILD_TESTS)
+  message(STATUS "LOBSIM_BUILD_TESTS is ON - Configuring tests")
   include(CTest)
 
   include(FetchContent)
@@ -123,11 +155,21 @@ endif()
 # ---- Python extension (pybind11) ----
 # This builds a module that will be imported as: `import lobsim._core`
 if(LOBSIM_BUILD_PYTHON)
-  # Force pybind11 to use modern FindPython (avoids CMP0148 warnings and
-  # prevents broken framework-Python include paths like conda's python.app).
+  # Force pybind11 to use modern FindPython
   set(PYBIND11_FINDPYTHON ON)
 
-  find_package(pybind11 CONFIG REQUIRED)
+  # Robust fallback: Try finding installed package first, otherwise FetchContent
+  find_package(pybind11 CONFIG QUIET)
+  if(NOT pybind11_FOUND)
+    message(STATUS "pybind11 not found, fetching via FetchContent...")
+    include(FetchContent)
+    FetchContent_Declare(
+      pybind11
+      GIT_REPOSITORY https://github.com/pybind/pybind11.git
+      GIT_TAG        v2.11.1
+    )
+    FetchContent_MakeAvailable(pybind11)
+  endif()
 
   # The pybind module target name can be anything; OUTPUT_NAME controls the filename.
   pybind11_add_module(lobsim_py MODULE
@@ -154,14 +196,19 @@ if(LOBSIM_BUILD_PYTHON)
 endif()
 
 # ---- Examples ----
-add_executable(lobsim_cpp_example examples/lobsim_cpp.cpp)
-target_link_libraries(lobsim_cpp_example PRIVATE lobsim::core lobsim::parquet)
+if(LOBSIM_BUILD_PARQUET)
+  add_executable(lobsim_cpp_example examples/lobsim_cpp.cpp)
+  target_link_libraries(lobsim_cpp_example PRIVATE lobsim::core lobsim::parquet)
 
-add_executable(lobsim_multibook_example examples/lobsim_multibook_cpp.cpp)
-target_link_libraries(lobsim_multibook_example PRIVATE lobsim::core lobsim::parquet)
+  add_executable(lobsim_multibook_example examples/lobsim_multibook_cpp.cpp)
+  target_link_libraries(lobsim_multibook_example PRIVATE lobsim::core lobsim::parquet)
+  
+  add_executable(lobsim_bench_cpp benchmark/lobsim_bench_cpp.cpp)
+  target_link_libraries(lobsim_bench_cpp PRIVATE lobsim::core lobsim::parquet)
+endif()
 
-add_executable(lobsim_lobster_example examples/lobsim_lobster_cpp.cpp)
-target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
+# add_executable(lobsim_lobster_example examples/lobsim_lobster_cpp.cpp)
+# target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
 
-add_executable(lobsim_bench_cpp benchmark/lobsim_bench_cpp.cpp)
-target_link_libraries(lobsim_bench_cpp PRIVATE lobsim::core lobsim::parquet)
+add_executable(lobsim_bench_synthetic benchmark/lobsim_bench_synthetic.cpp)
+target_link_libraries(lobsim_bench_synthetic PRIVATE lobsim::core)
