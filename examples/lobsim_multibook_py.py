@@ -53,11 +53,8 @@ def parse_time_us(v) -> int:
         v = v.strip()
         if ":" in v:
             hh, mm, rest = v.split(":")
-            if "." in rest:
-                ss, frac = rest.split(".")
-            else:
-                ss, frac = rest, "0"
-            frac = (frac + "000000")[:6]
+            ss, frac = rest.split(".") if "." in rest else (rest, "0")
+            frac = f"{frac}000000"[:6]
             return (
                 int(hh) * 3600_000_000
                 + int(mm) * 60_000_000
@@ -109,10 +106,12 @@ class CoinbaseParquetSource:
         schema_names = self._pq.schema_arrow.names
         recv_col = next((n for n in schema_names if n in ("time_received", "time_feed")), None)
         if recv_col is None:
-            recv_candidates = [n for n in schema_names if "time" in n and "exchange" not in n]
-            if not recv_candidates:
+            if recv_candidates := [
+                n for n in schema_names if "time" in n and "exchange" not in n
+            ]:
+                recv_col = recv_candidates[0]
+            else:
                 raise ValueError("No received time column found")
-            recv_col = recv_candidates[0]
         self._recv_col = recv_col
         self._cols = [
             "time_exchange",

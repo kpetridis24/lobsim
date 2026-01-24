@@ -8,9 +8,11 @@
 #include "lobsim/paper_trading_simulator.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -18,16 +20,19 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <random>
 
 class MultiBookSimulator {
 public:
     struct Config {
         bool require_monotonic_ts_received{true};
         bool fail_fast{true};
+        LatencyModel latency_model{};
+        std::uint64_t seed{42};
     };
 
-    MultiBookSimulator() = default;
-    explicit MultiBookSimulator(Config cfg) : cfg_(cfg) {}
+    MultiBookSimulator() : rng_(42) {}
+    explicit MultiBookSimulator(Config cfg) : cfg_(cfg), rng_(cfg.seed) {}
     ~MultiBookSimulator() {
         for (auto& [_, entry] : books_) {
             if (entry.engine) {
@@ -58,8 +63,8 @@ public:
     PaperTradingSimulator* get_book(const BookId& id) { return get_book_key(book_key(id)); }
     const PaperTradingSimulator* get_book(const BookId& id) const { return get_book_key(book_key(id)); }
 
-    void init_from_l2_snapshot(const BookId& id, const std::vector<Side>& sides,
-                               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities) {
+    void init_from_l2_snapshot(const BookId& id, std::span<const Side> sides,
+                               std::span<const std::int64_t> prices, std::span<const std::int64_t> quantities) {
         auto* book = get_book(id);
         if (!book) {
             emit_diagnostic(book_key(id), DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK,
@@ -69,10 +74,10 @@ public:
         book->init_from_l2_snapshot(sides, prices, quantities);
     }
 
-    void init_from_l3_snapshot(const BookId& id, const std::vector<Side>& sides,
-                               const std::vector<std::int64_t>& prices, const std::vector<std::int64_t>& quantities,
-                               const std::vector<std::int64_t>& order_ids,
-                               const std::vector<std::int64_t>& trader_ids) {
+    void init_from_l3_snapshot(const BookId& id, std::span<const Side> sides,
+                               std::span<const std::int64_t> prices, std::span<const std::int64_t> quantities,
+                               std::span<const std::int64_t> order_ids,
+                               std::span<const std::int64_t> trader_ids) {
         auto* book = get_book(id);
         if (!book) {
             emit_diagnostic(book_key(id), DiagnosticRecordCode::APPLY_EVENT_REQUESTED_FOR_UNKNOWN_BOOK,
@@ -98,31 +103,37 @@ public:
         return it->second.engine.get();
     }
 
-    void set_log_sink(const BookId& id, ILogSink* sink) {
+    void set_log_sink(const BookId& id, std::shared_ptr<ILogSink> sink) {
         auto* book = get_book(id);
         if (!book) {
             emit_diagnostic(book_key(id), DiagnosticRecordCode::SET_LOG_SINK_FOR_UNKNOWN_BOOK_IN_MULTI_BOOK_SIMULATOR,
                             DiagnosticRecordSeverity::ERROR, 0, -1, -1);
             return;
         }
-        book->set_log_sink(sink);
+        book->set_log_sink(std::move(sink));
         book_sinks_.erase(book_key(id));
     }
 
-    void set_multi_log_sink(IMultiLogSink* sink) {
+    void set_log_sink(const BookId& id, ILogSink* sink) {
+        set_log_sink(id, std::shared_ptr<ILogSink>(sink, [](ILogSink*) {}));
+    }
+
+    void set_multi_log_sink(std::shared_ptr<IMultiLogSink> sink) {
         // If we currently own per-book wrappers, detach them before destroying them.
-        // This matters if the caller sets the multi sink to nullptr; otherwise we'd
-        // leave each engine with a dangling sink pointer.
         for (auto& [key, entry] : books_) {
             if (book_sinks_.find(key) != book_sinks_.end()) {
                 entry.engine->set_log_sink(nullptr);
             }
         }
-        multi_sink_ = sink;
+        multi_sink_ = std::move(sink);
         book_sinks_.clear();
         for (auto& [key, entry] : books_) {
             attach_book_sink(entry);
         }
+    }
+
+    void set_multi_log_sink(IMultiLogSink* sink) {
+        set_multi_log_sink(std::shared_ptr<IMultiLogSink>(sink, [](IMultiLogSink*) {}));
     }
 
     std::optional<std::int64_t> depth_at(const BookId& id, Side side, std::int64_t price_ticks) const {
@@ -172,12 +183,33 @@ public:
             ev.symbol_id = key;
         }
         ev.update_source = UpdateSource::STRATEGY;
+        
+        std::int64_t latency_val = 0;
+        if (latency.has_value()) {
+            latency_val = latency.value();
+        } else {
+            latency_val = sample_latency();
+        }
+
         if (ev.ts_received == 0) {
             const std::int64_t base = has_current_time_ ? current_ts_received_ : 0;
-            ev.ts_received = base + latency.value_or(1);
-        } else if (latency.has_value()) {
-            ev.ts_received += latency.value();
+            // Allow negative latency to trigger time travel checks downstream
+            ev.ts_received = base + latency_val;
+            // Ensure at least 1 tick forward if latency is effectively 0 or negative but we want progress? 
+            // The original code used: ev.ts_received = base + latency.value_or(1);
+            // If we assume latency_val is the intended delay.
+            if (ev.ts_received <= base && latency_val <= 0 && !latency.has_value()) {
+                 // If using default sampling and it produced <= 0, force forward progress?
+                 // But if user explicitly passed negative latency, we should honor it (and let it fail validation).
+                 ev.ts_received = base + 1;
+            }
+        } else {
+            // If ts_received is provided, we assume it is the "submission time" and we add latency?
+            // Existing logic: ev.ts_received += latency.value();
+            // So if user provides ts, we shift it by latency.
+            ev.ts_received += latency_val;
         }
+        
         if (cfg_.require_monotonic_ts_received && has_current_time_ && ev.ts_received < current_ts_received_) {
             emit_diagnostic(key, DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL, DiagnosticRecordSeverity::ERROR, 0,
                             ev.ts_received, ev.ts_exchange);
@@ -186,13 +218,13 @@ public:
             }
             return;
         }
-        const std::size_t idx = strategy_events_.size();
-        strategy_events_.push_back(StrategyItem{std::move(ev), ++strategy_seq_counter_});
-        auto& ref = strategy_events_.back();
-        if (ref.ev.ts_exchange == 0) {
-            ref.ev.ts_exchange = std::numeric_limits<std::int64_t>::max();
+        const std::uint64_t seq = ++strategy_seq_counter_;
+        if (ev.ts_exchange == 0) {
+            ev.ts_exchange = std::numeric_limits<std::int64_t>::max();
         }
-        heap_.push(HeapEntry{ref.ev.ts_received, ref.ev.ts_exchange, 0, HeapEntry::EntryKind::Strategy, idx});
+        strategy_events_.emplace(seq, StrategyItem{std::move(ev), seq});
+        heap_.push(HeapEntry{strategy_events_.at(seq).ev.ts_received, strategy_events_.at(seq).ev.ts_exchange, 0,
+                             HeapEntry::EntryKind::Strategy, seq});
     }
 
     std::optional<std::int64_t> current_time() const {
@@ -212,7 +244,8 @@ public:
         heap_.pop();
 
         if (entry.kind == HeapEntry::EntryKind::Strategy) {
-            if (entry.strategy_index >= strategy_events_.size()) {
+            auto it = strategy_events_.find(entry.strategy_seq);
+            if (it == strategy_events_.end()) {
                 emit_diagnostic("__multibook__", DiagnosticRecordCode::HEAP_ENTRY_WITHOUT_BUFFERED_EVENT,
                                 DiagnosticRecordSeverity::ERROR, 0, current_ts_received_, -1);
                 if (cfg_.fail_fast) {
@@ -220,7 +253,8 @@ public:
                 }
                 return false;
             }
-            NormalizedLobEvent ev = strategy_events_[entry.strategy_index].ev;
+            NormalizedLobEvent ev = std::move(it->second.ev);
+            strategy_events_.erase(it);
             apply_to_book(ev.symbol_id, ev);
             return true;
         } else {
@@ -340,13 +374,13 @@ private:
 
     template <typename Source, typename Adapter, typename RawEvent> struct Stream final : IStream {
         Stream(Source& source, const Adapter& adapter, bool fail_fast)
-            : source_(&source), adapter_(&adapter), fail_fast_(fail_fast) {}
+            : source_(&source), adapter_(adapter), fail_fast_(fail_fast) {}
 
         bool next_normalized(NormalizedLobEvent& out) override {
             RawEvent raw{};
             while (source_->next(raw)) {
                 if constexpr (has_try_normalize<Adapter, RawEvent>) {
-                    if (!adapter_->try_normalize(raw, out)) {
+                    if (!adapter_.try_normalize(raw, out)) {
                         if (fail_fast_) {
                             throw std::runtime_error("MultiBookSimulator: adapter normalization failed.");
                         }
@@ -354,7 +388,7 @@ private:
                     }
                 } else {
                     try {
-                        out = adapter_->normalize(raw);
+                        out = adapter_.normalize(raw);
                     } catch (const std::exception&) {
                         if (fail_fast_) {
                             throw;
@@ -368,7 +402,7 @@ private:
         }
 
         Source* source_{nullptr};
-        const Adapter* adapter_{nullptr};
+        Adapter adapter_;
         bool fail_fast_{true};
     };
 
@@ -396,7 +430,7 @@ private:
         std::int64_t ts_exchange{0};
         std::size_t stream_index{0};
         enum class EntryKind : std::uint8_t { Stream = 0, Strategy = 1 } kind{EntryKind::Stream};
-        std::size_t strategy_index{0};
+        std::uint64_t strategy_seq{0};
     };
 
     struct HeapCompare {
@@ -413,7 +447,7 @@ private:
             if (a.kind == HeapEntry::EntryKind::Stream) {
                 return a.stream_index > b.stream_index;
             }
-            return a.strategy_index > b.strategy_index;
+            return a.strategy_seq > b.strategy_seq;
         }
     };
 
@@ -495,26 +529,47 @@ private:
     }
 
     Config cfg_{};
-    std::unordered_map<std::string, std::unique_ptr<BookScopedSink>> book_sinks_{};
+    std::unordered_map<std::string, std::shared_ptr<BookScopedSink>> book_sinks_{};
     std::unordered_map<std::string, BookEntry> books_{};
-    IMultiLogSink* multi_sink_{nullptr};
+    std::shared_ptr<IMultiLogSink> multi_sink_{nullptr};
     std::vector<StreamState> streams_{};
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_{};
     struct StrategyItem {
         NormalizedLobEvent ev{};
         std::uint64_t insertion_seq{0};
     };
-    std::vector<StrategyItem> strategy_events_{};
+    std::unordered_map<std::uint64_t, StrategyItem> strategy_events_{};
     std::uint64_t strategy_seq_counter_{0};
     bool has_current_time_{false};
     std::int64_t current_ts_received_{0};
+    std::mt19937_64 rng_;
+
+    std::int64_t sample_latency() {
+        switch (cfg_.latency_model.type) {
+            case LatencyModelType::FIXED:
+                return static_cast<std::int64_t>(cfg_.latency_model.param1);
+            case LatencyModelType::UNIFORM: {
+                double p1 = cfg_.latency_model.param1;
+                double p2 = std::max(p1, cfg_.latency_model.param2);
+                std::uniform_real_distribution<double> dist(p1, p2);
+                return static_cast<std::int64_t>(dist(rng_));
+            }
+            case LatencyModelType::LOGNORMAL: {
+                double mu = cfg_.latency_model.param1;
+                double sigma = std::max(1e-9, cfg_.latency_model.param2);
+                std::lognormal_distribution<double> dist(mu, sigma);
+                return static_cast<std::int64_t>(dist(rng_));
+            }
+        }
+        return 0;
+    }
 
     void attach_book_sink(BookEntry& entry) {
         if (!multi_sink_) {
             return;
         }
-        auto wrapped = std::make_unique<BookScopedSink>(entry.key, multi_sink_);
-        entry.engine->set_log_sink(wrapped.get());
+        auto wrapped = std::make_shared<BookScopedSink>(entry.key, multi_sink_.get());
+        entry.engine->set_log_sink(wrapped);
         book_sinks_[entry.key] = std::move(wrapped);
     }
 

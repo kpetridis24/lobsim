@@ -12,8 +12,7 @@ def _repo_root() -> Path:
 
 
 def _find_examples_dir() -> Path | None:
-    env_path = os.getenv("LOBSIM_DEMO_PATH")
-    if env_path:
+    if env_path := os.getenv("LOBSIM_DEMO_PATH"):
         candidate = Path(env_path).expanduser().resolve()
         if candidate.is_dir():
             return candidate
@@ -23,10 +22,7 @@ def _find_examples_dir() -> Path | None:
         return repo_candidate
 
     cwd_candidate = Path.cwd() / "examples"
-    if cwd_candidate.is_dir():
-        return cwd_candidate
-
-    return None
+    return cwd_candidate if cwd_candidate.is_dir() else None
 
 
 def _resolve_demo_script(name: str) -> Path:
@@ -166,9 +162,7 @@ def main() -> int:
         return _run_streamlit(script)
     if args.command == "example":
         data_path = _default_data_path()
-        if args.lang == "cpp":
-            return _run_cpp_example(data_path)
-        return _run_py_example()
+        return _run_cpp_example(data_path) if args.lang == "cpp" else _run_py_example()
     if args.command == "bench":
         data_path = Path(args.path) if args.path else _default_data_path()
         max_events = args.max_events if args.max_events > 0 else None
@@ -177,10 +171,7 @@ def main() -> int:
         if args.lang == "py":
             return _run_py_bench(data_path, max_events)
         status = _run_cpp_bench(data_path, max_events)
-        if status != 0:
-            return status
-        return _run_py_bench(data_path, max_events)
-
+        return status if status != 0 else _run_py_bench(data_path, max_events)
     parser.print_help()
     return 2
 

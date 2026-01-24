@@ -78,17 +78,15 @@ def _render_table(rows: list[dict[str, object]], *, height_px: int) -> None:
 
 
 def _format_levels(levels: list[tuple[int, int]], *, tick_size: float, lot_size: float) -> list[dict[str, object]]:
-    rows = []
-    for price_ticks, qty_lots in levels:
-        rows.append(
-            {
-                "price": round(price_ticks * tick_size, 2),
-                "qty": round(qty_lots * lot_size, 8),
-                "price_ticks": price_ticks,
-                "qty_lots": qty_lots,
-            }
-        )
-    return rows
+    return [
+        {
+            "price": round(price_ticks * tick_size, 2),
+            "qty": round(qty_lots * lot_size, 8),
+            "price_ticks": price_ticks,
+            "qty_lots": qty_lots,
+        }
+        for price_ticks, qty_lots in levels
+    ]
 
 
 # --------------------------
@@ -170,7 +168,7 @@ def compute_account_metrics(
     """
     fee_rate = fee_bps / 10_000.0
 
-    cash = float(starting_cash)
+    cash = starting_cash
     position = 0.0
     fees_paid = 0.0
 
@@ -182,7 +180,7 @@ def compute_account_metrics(
 
     trades = list(_iter_strategy_trades(sink))
     if not trades:
-        equity = cash if mark_px is None else cash
+        equity = cash
         return {
             "cash": cash,
             "position": 0.0,
@@ -215,7 +213,7 @@ def compute_account_metrics(
                 position += qty
             else:
                 # covering short
-                cover = min(qty, -position)
+                min(qty, -position)
                 position += qty
                 # if flipped to long, remaining portion has avg_cost=price
                 if position > 0:
@@ -359,22 +357,20 @@ def risk_can_submit(
 
         if clipped_qty <= 0:
             return False, 0.0, "blocked: cash_or_position"
-    else:
-        # SELL constraints
-        if not risk.cfg.allow_short:
-            # Must have inventory to sell
-            max_qty_by_inv = free_long_inventory
-            clipped_qty = min(clipped_qty, max_qty_by_inv)
-            if clipped_qty <= 0:
-                return False, 0.0, "blocked: no_inventory"
-        else:
-            # Short allowed: ensure |new_position| <= max_pos
-            # new_pos = pos - qty
-            max_qty_by_pos = (pos + max_pos)  # qty <= pos + max_pos
-            clipped_qty = min(clipped_qty, max_qty_by_pos)
-            if clipped_qty <= 0:
-                return False, 0.0, "blocked: max_position"
+    elif risk.cfg.allow_short:
+        # Short allowed: ensure |new_position| <= max_pos
+        # new_pos = pos - qty
+        max_qty_by_pos = (pos + max_pos)  # qty <= pos + max_pos
+        clipped_qty = min(clipped_qty, max_qty_by_pos)
+        if clipped_qty <= 0:
+            return False, 0.0, "blocked: max_position"
 
+    else:
+        # Must have inventory to sell
+        max_qty_by_inv = free_long_inventory
+        clipped_qty = min(clipped_qty, max_qty_by_inv)
+        if clipped_qty <= 0:
+            return False, 0.0, "blocked: no_inventory"
     # Snap to lot size using your helper
     clipped_lots = to_ticks(clipped_qty, lot_size, strict=False)
     clipped_units = clipped_lots * lot_size
@@ -427,22 +423,21 @@ def strategy_tick(
     ledger = sink.get_paper_ledger()
     last_seq = sink.get_events()[-1].seq if sink.get_events() else 0
     for entry in ledger.values():
-        if entry.state.status in (PaperOrderLedgerStatus.OPEN, PaperOrderLedgerStatus.PARTIALLY_FILLED):
-            if ttl_events > 0 and last_seq - entry.state.created_seq >= ttl_events:
-                cancel = NormalizedLobEvent(
-                    ts_exchange=current_ts,
-                    ts_received=current_ts,
-                    side=entry.state.side,
-                    update_type=UpdateType.DELETE,
-                    price_ticks=entry.state.price_ticks,
-                    quantity_lots=0,
-                    order_id=entry.state.order_id,
-                    trader_id=UnknownTraderIdSentinel,
-                    aggressor_id=UnknownAggressorIdSentinel,
-                    symbol_id=adapter.symbol_id,
-                    update_source=UpdateSource.STRATEGY,
-                )
-                engine.update(cancel)
+        if entry.state.status in (PaperOrderLedgerStatus.OPEN, PaperOrderLedgerStatus.PARTIALLY_FILLED) and (ttl_events > 0 and last_seq - entry.state.created_seq >= ttl_events):
+            cancel = NormalizedLobEvent(
+                ts_exchange=current_ts,
+                ts_received=current_ts,
+                side=entry.state.side,
+                update_type=UpdateType.DELETE,
+                price_ticks=entry.state.price_ticks,
+                quantity_lots=0,
+                order_id=entry.state.order_id,
+                trader_id=UnknownTraderIdSentinel,
+                aggressor_id=UnknownAggressorIdSentinel,
+                symbol_id=adapter.symbol_id,
+                update_source=UpdateSource.STRATEGY,
+            )
+            engine.update(cancel)
 
     best_bid = engine.get_best_price_ticks(Side.BUY)
     best_ask = engine.get_best_price_ticks(Side.SELL)
@@ -720,7 +715,7 @@ def strategy_orders_table(sink: InMemoryLogSink, *, view: str):
     if view == "Aggressive":
         rows = aggressive_rows
     elif view == "All":
-        rows = rows + aggressive_rows
+        rows += aggressive_rows
 
     rows.sort(key=lambda r: r["created_seq"])
     _render_table(rows, height_px=260)
@@ -731,71 +726,68 @@ def strategy_fills_table(sink: InMemoryLogSink):
     rows = []
     adapter = st.session_state.adapter
     for entry in ledger.values():
-        for f in entry.fills:
-            rows.append(
-                {
-                    "seq": f.seq,
-                    "order_id": entry.state.order_id,
-                    "side": entry.state.side.name,
-                    "price": round(f.price_ticks * adapter.tick_size, 2),
-                    "qty": round(f.qty_lots * adapter.lot_size, 8),
-                    "role": f.role.name,
-                }
-            )
+        rows.extend(
+            {
+                "seq": f.seq,
+                "order_id": entry.state.order_id,
+                "side": entry.state.side.name,
+                "price": round(f.price_ticks * adapter.tick_size, 2),
+                "qty": round(f.qty_lots * adapter.lot_size, 8),
+                "role": f.role.name,
+            }
+            for f in entry.fills
+        )
     rows.sort(key=lambda r: r["seq"])
     _render_table(rows, height_px=450)
 
 
 def recent_events(sink: InMemoryLogSink):
     events = sink.get_events()[-100:]
-    rows = []
     adapter = st.session_state.adapter
-    for ev in events[::-1]:
-        rows.append(
-            {
-                "seq": ev.seq,
-                "ts": ev.ts_received,
-                "side": ev.side.name,
-                "type": ev.update_type.name,
-                "src": ev.source.name,
-                "price": round(ev.price_ticks * adapter.tick_size, 2),
-                "qty": round(ev.qty_lots * adapter.lot_size, 8),
-                "order": ev.order_id,
-            }
-        )
+    rows = [
+        {
+            "seq": ev.seq,
+            "ts": ev.ts_received,
+            "side": ev.side.name,
+            "type": ev.update_type.name,
+            "src": ev.source.name,
+            "price": round(ev.price_ticks * adapter.tick_size, 2),
+            "qty": round(ev.qty_lots * adapter.lot_size, 8),
+            "order": ev.order_id,
+        }
+        for ev in events[::-1]
+    ]
     _render_table(rows, height_px=380)
 
 
 def recent_fills(sink: InMemoryLogSink):
     fills = sink.get_fills()[-100:]
-    rows = []
     adapter = st.session_state.adapter
-    for r in reversed(fills):
-        rows.append(
-            {
-                "seq": r.seq,
-                "ts": r.ts_received,
-                "price": round(r.price_ticks * adapter.tick_size, 2),
-                "qty": round(r.qty_lots * adapter.lot_size, 8),
-                "maker_src": r.maker_source.name,
-                "taker_src": r.taker_source.name,
-            }
-        )
+    rows = [
+        {
+            "seq": r.seq,
+            "ts": r.ts_received,
+            "price": round(r.price_ticks * adapter.tick_size, 2),
+            "qty": round(r.qty_lots * adapter.lot_size, 8),
+            "maker_src": r.maker_source.name,
+            "taker_src": r.taker_source.name,
+        }
+        for r in reversed(fills)
+    ]
     _render_table(rows, height_px=380)
 
 
 def recent_diagnostics(sink: InMemoryLogSink):
     diags = sink.get_diagnostics()[-100:]
-    rows = []
-    for r in reversed(diags):
-        rows.append(
-            {
-                "seq": r.seq,
-                "ts": r.ts_received,
-                "code": r.code,
-                "severity": r.severity,
-            }
-        )
+    rows = [
+        {
+            "seq": r.seq,
+            "ts": r.ts_received,
+            "code": r.code,
+            "severity": r.severity,
+        }
+        for r in reversed(diags)
+    ]
     _render_table(rows, height_px=340)
 
 

@@ -9,3 +9,6 @@ dist/
 # Built Python extension (platform/Python-version specific)
 python/lobsim/_core*.so
 python/lobsim/_core*.pyd
+
+# Agent instructions
+AGENTS.md
