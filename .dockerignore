@@ -1,0 +1,10 @@
+build
+**/__pycache__/
+**/*.pyc
+.git
+.gitignore
+sample_data
+python/.venv
+python/.mypy_cache
+python/.ruff_cache
+**/.DS_Store
