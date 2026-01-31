@@ -14,9 +14,18 @@ class PaperTradingSimulator(_PaperTradingSimulator):
         prices: Sequence[int] | None = None,
         quantities: Sequence[int] | None = None,
         sink: InMemoryLogSink | None = None,
+        historical_capacity: int | None = None,
+        paper_capacity: int | None = None,
     ) -> None:
         if sides is None and prices is None and quantities is None:
-            super().__init__()
+            if historical_capacity is not None or paper_capacity is not None:
+                hist = (
+                    historical_capacity if historical_capacity is not None else 200000
+                )
+                paper = paper_capacity if paper_capacity is not None else 100000
+                super().__init__(hist, paper)
+            else:
+                super().__init__()
             if sink is not None:
                 super().set_log_sink(sink)
             return
@@ -24,7 +33,15 @@ class PaperTradingSimulator(_PaperTradingSimulator):
         if sides is None or prices is None or quantities is None:
             raise TypeError("sides, prices, and quantities must be provided together")
 
-        super().__init__(sides, prices, quantities, sink)
+        if historical_capacity is not None or paper_capacity is not None:
+            hist = historical_capacity if historical_capacity is not None else 200000
+            paper = paper_capacity if paper_capacity is not None else 100000
+            super().__init__(hist, paper)
+            if sink is not None:
+                super().set_log_sink(sink)
+            super().init_from_l2_snapshot(sides, prices, quantities)
+        else:
+            super().__init__(sides, prices, quantities, sink)
 
     def set_log_sink(self, sink: InMemoryLogSink) -> None:  # type: ignore[override]
         super().set_log_sink(sink)
@@ -63,6 +80,8 @@ PaperTradingSimulator.__signature__ = Signature(
         Parameter("prices", Parameter.POSITIONAL_OR_KEYWORD, default=None),
         Parameter("quantities", Parameter.POSITIONAL_OR_KEYWORD, default=None),
         Parameter("sink", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        Parameter("historical_capacity", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        Parameter("paper_capacity", Parameter.POSITIONAL_OR_KEYWORD, default=None),
     ]
 )
 

@@ -6,6 +6,16 @@ build_dir="${root_dir}/build"
 out_dir="${build_dir}/fill_compare"
 data_path="${1:-${root_dir}/sample_data/coinbase_btcusdt_sample.parquet}"
 
+if [ ! -f "${data_path}" ]; then
+  echo "Skipping fill comparison: sample data not found at ${data_path}" >&2
+  exit 0
+fi
+
+if head -n 1 "${data_path}" | grep -q "git-lfs.github.com/spec"; then
+  echo "Skipping fill comparison: ${data_path} is a Git LFS pointer (data not available in CI)." >&2
+  exit 0
+fi
+
 mkdir -p "${out_dir}"
 cpp_out="${out_dir}/fills_cpp.csv"
 py_out="${out_dir}/fills_py.csv"

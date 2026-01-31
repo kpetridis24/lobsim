@@ -5,6 +5,7 @@ build*/
 venv*/
 *__pycache__*
 dist/
+/benchmark/profiles/*
 
 # Built Python extension (platform/Python-version specific)
 python/lobsim/_core*.so

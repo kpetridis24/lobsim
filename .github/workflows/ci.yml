@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -28,7 +28,7 @@ jobs:
       - name: Install build deps
         run: |
           brew update
-          brew install llvm 
+          brew install llvm boost
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
 
       - name: C++ format check (clang-format)
@@ -50,12 +50,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Install build deps
         run: |
           brew update
-          brew install cmake ninja pybind11 apache-arrow
+          brew install cmake ninja pybind11 apache-arrow boost
 
       - name: Configure
         run: |
@@ -77,7 +77,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -87,7 +87,7 @@ jobs:
       - name: Install build deps
         run: |
           brew update
-          brew install cmake ninja pybind11 apache-arrow
+          brew install cmake ninja pybind11 apache-arrow boost
 
       - name: Configure
         run: |

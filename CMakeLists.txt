@@ -21,6 +21,7 @@ include(GNUInstallDirs)
 find_package(ZLIB REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 find_package(Parquet CONFIG REQUIRED)
+find_package(Boost REQUIRED)
 
 # ---- Core library: lobsim_core ----
 # List sources explicitly (recommended). Add more files as you implement.
@@ -43,6 +44,7 @@ target_include_directories(lobsim_core
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    ${Boost_INCLUDE_DIRS}
 )
 
 # Warnings (keep reasonable; adjust later)
@@ -165,3 +167,17 @@ target_link_libraries(lobsim_lobster_example PRIVATE lobsim::core)
 
 add_executable(lobsim_bench_cpp benchmark/lobsim_bench_cpp.cpp)
 target_link_libraries(lobsim_bench_cpp PRIVATE lobsim::core lobsim::parquet)
+
+add_executable(lobsim_event_generator benchmark/lobsim_event_generator.cpp)
+
+add_executable(lobsim_udp_engine benchmark/lobsim_udp_main.cpp)
+target_link_libraries(lobsim_udp_engine PRIVATE lobsim::core)
+set_target_properties(lobsim_udp_engine PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+find_package(Threads REQUIRED)
+target_link_libraries(lobsim_udp_engine PRIVATE Threads::Threads)
+set_target_properties(lobsim_udp_engine PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(lobsim_memory_replay benchmark/lobsim_memory_replay_main.cpp)
+target_link_libraries(lobsim_memory_replay PRIVATE lobsim::core)
+set_target_properties(lobsim_memory_replay PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+target_link_libraries(lobsim_memory_replay PRIVATE Threads::Threads)

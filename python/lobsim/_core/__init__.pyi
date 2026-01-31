@@ -103,7 +103,18 @@ class NormalizedLobEvent:
     ) -> None: ...
 
 class PaperTradingSimulator:
+    @typing.overload
     def __init__(self) -> None: ...
+    @typing.overload
+    def __init__(self, historical_capacity: int, paper_capacity: int) -> None: ...
+    @typing.overload
+    def __init__(
+        self,
+        sides: list[types.Side],
+        prices: list[int],
+        quantities: list[int],
+        sink: InMemoryLogSink | None = ...,
+    ) -> None: ...
     def depth_at(self, arg0: types.Side, arg1: int) -> int | None: ...
     def init_from_l2_snapshot(
         self, sides: list[types.Side], prices: list[int], quantities: list[int]

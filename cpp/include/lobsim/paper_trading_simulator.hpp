@@ -2,6 +2,8 @@
 #include "lobsim/engine.hpp"
 #include "lobsim/log_sink.hpp"
 
+#include <boost/intrusive/list.hpp>
+
 enum class PaperOrderStatus : std::uint8_t {
     OPEN = 0,
     PARTIALLY_FILLED = 1,
@@ -19,15 +21,22 @@ public:
     std::size_t paper_index{0};
 };
 
+struct OrderPoolConfig {
+    std::size_t historical_capacity{200000};
+    std::size_t paper_capacity{100000};
+};
+
 class PaperTradingSimulator final : public IMatchingEngine {
 public:
-    PaperTradingSimulator() : IMatchingEngine() {}
+    explicit PaperTradingSimulator(OrderPoolConfig pool_config = {});
+    PaperTradingSimulator(std::size_t historical_capacity, std::size_t paper_capacity);
     PaperTradingSimulator(std::vector<Side>& sides, std::vector<std::int64_t>& prices,
-                          std::vector<std::int64_t>& quantities, ILogSink* sink = nullptr)
-        : IMatchingEngine() {
-        this->sink = sink;
-        init_from_l2_snapshot(sides, prices, quantities);
-    }
+                          std::vector<std::int64_t>& quantities, ILogSink* sink = nullptr,
+                          OrderPoolConfig pool_config = {});
+    PaperTradingSimulator(const PaperTradingSimulator&) = delete;
+    PaperTradingSimulator& operator=(const PaperTradingSimulator&) = delete;
+    PaperTradingSimulator(PaperTradingSimulator&&) = delete;
+    PaperTradingSimulator& operator=(PaperTradingSimulator&&) = delete;
     ~PaperTradingSimulator() = default;
 
     void update(const NormalizedLobEvent& event) override;
@@ -45,10 +54,48 @@ public:
     void set_log_sink(ILogSink* sink);
 
 private:
-    using OrderTraderQuantitySource = std::tuple<std::int64_t, std::int64_t, std::int64_t, UpdateSource, std::uint64_t>;
-    using OrderPriorityQueue = std::list<OrderTraderQuantitySource>;
+    using OrderHook = boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
+    using PaperOrderHook =
+        boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
+
+    struct OrderNode {
+        OrderHook hook{};
+        std::int64_t order_id{0};
+        std::int64_t trader_id{0};
+        std::int64_t qty{0};
+        UpdateSource source{UpdateSource::HISTORICAL};
+        std::uint64_t arrival_seq{0};
+        std::size_t pool_index{0};
+        bool in_use{false};
+    };
+
+    struct PaperOrderNode {
+        PaperOrderHook hook{};
+        std::int64_t order_id{0};
+        std::size_t pool_index{0};
+        bool in_use{false};
+    };
+
+    using OrderPriorityQueue =
+        boost::intrusive::list<OrderNode, boost::intrusive::member_hook<OrderNode, OrderHook, &OrderNode::hook>,
+                               boost::intrusive::constant_time_size<false>>;
     using Book = std::unordered_map<std::int64_t, OrderPriorityQueue>;
-    using PaperOrderQueue = std::list<std::int64_t>;
+    using PaperOrderQueue =
+        boost::intrusive::list<PaperOrderNode,
+                               boost::intrusive::member_hook<PaperOrderNode, PaperOrderHook, &PaperOrderNode::hook>,
+                               boost::intrusive::constant_time_size<false>>;
+
+    struct OrderInfo {
+        Side side{Side::BUY};
+        std::int64_t price_ticks{0};
+        OrderNode* node{nullptr};
+    };
+
+    struct PaperOrderInfo {
+        Side side{Side::BUY};
+        std::int64_t price_ticks{0};
+        PaperOrderNode* node{nullptr};
+    };
 
     struct FenwickTree {
         std::vector<std::int64_t> tree{};
@@ -116,12 +163,18 @@ private:
                                     const NormalizedLobEvent& aggressor);
     std::int64_t trade_against_paper_level(Side passive_side, std::int64_t price_ticks, std::int64_t trade_lots,
                                            const NormalizedLobEvent& aggressor);
-    void remove_paper_order(PaperOrderLevel& level, PaperOrderQueue::iterator it, std::int64_t removed_qty,
+    void remove_paper_order(PaperOrderLevel& level, PaperOrderNode* node, std::int64_t removed_qty,
                             PaperOrderStatus status);
     void reduce_paper_order(const NormalizedLobEvent& event);
     void set_paper_order(std::int64_t order_id, std::int64_t new_qty);
 
     void clear_state();
+    void init_pools();
+    void reset_pools();
+    OrderNode* acquire_order_node();
+    void release_order_node(OrderNode* node);
+    PaperOrderNode* acquire_paper_node();
+    void release_paper_node(PaperOrderNode* node);
 
     std::uint64_t seq = 0;
     std::uint64_t order_arrival_seq = 0;
@@ -133,11 +186,17 @@ private:
     mutable std::priority_queue<std::int64_t> asks_heap;
     // For O(1) lookup based on order_id (for example for order cancel)
     // For this purpose, we store order_id -> {side, price_ticks, location in queue}
-    std::unordered_map<std::int64_t, std::tuple<Side, std::int64_t, OrderPriorityQueue::iterator>> order_info;
+    std::unordered_map<std::int64_t, OrderInfo> order_info;
     std::unordered_map<std::int64_t, PaperOrder> paper_orders;
-    std::unordered_map<std::int64_t, std::tuple<Side, std::int64_t, PaperOrderQueue::iterator>> paper_order_info;
+    std::unordered_map<std::int64_t, PaperOrderInfo> paper_order_info;
     std::unordered_map<std::int64_t, PaperOrderLevel> paper_bids;
     std::unordered_map<std::int64_t, PaperOrderLevel> paper_asks;
     // Pointer to sink for fill registering
     ILogSink* sink = nullptr;
+
+    OrderPoolConfig pool_config_{};
+    std::vector<OrderNode> order_pool{};
+    std::vector<std::size_t> order_free{};
+    std::vector<PaperOrderNode> paper_pool{};
+    std::vector<std::size_t> paper_free{};
 };
