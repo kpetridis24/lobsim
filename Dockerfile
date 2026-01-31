@@ -6,6 +6,7 @@ RUN mamba install -y -c conda-forge \
     cmake \
     ninja \
     cxx-compiler \
+    boost-cpp \
     zlib \
     arrow-cpp \
   && mamba clean -a -y

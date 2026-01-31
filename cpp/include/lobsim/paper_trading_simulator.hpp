@@ -1,5 +1,7 @@
 #pragma once
 #include "lobsim/engine.hpp"
+#include "lobsim/fast_hash_map.hpp"
+#include "lobsim/inline.hpp"
 #include "lobsim/log_sink.hpp"
 
 #include <boost/intrusive/list.hpp>
@@ -79,7 +81,7 @@ private:
     using OrderPriorityQueue =
         boost::intrusive::list<OrderNode, boost::intrusive::member_hook<OrderNode, OrderHook, &OrderNode::hook>,
                                boost::intrusive::constant_time_size<false>>;
-    using Book = std::unordered_map<std::int64_t, OrderPriorityQueue>;
+    using Book = ska::flat_hash_map<std::int64_t, OrderPriorityQueue>;
     using PaperOrderQueue =
         boost::intrusive::list<PaperOrderNode,
                                boost::intrusive::member_hook<PaperOrderNode, PaperOrderHook, &PaperOrderNode::hook>,
@@ -100,7 +102,7 @@ private:
     struct FenwickTree {
         std::vector<std::int64_t> tree{};
 
-        void ensure_size(std::size_t n) {
+        LOBSIM_FORCEINLINE void ensure_size(std::size_t n) {
             const std::size_t needed = n + 1;
             if (tree.size() >= needed) {
                 return;
@@ -118,13 +120,13 @@ private:
             }
         }
 
-        void add(std::size_t index, std::int64_t delta) {
+        LOBSIM_FORCEINLINE void add(std::size_t index, std::int64_t delta) {
             for (std::size_t i = index + 1; i < tree.size(); i += i & -i) {
                 tree[i] += delta;
             }
         }
 
-        std::int64_t sum(std::size_t count) const {
+        LOBSIM_FORCEINLINE std::int64_t sum(std::size_t count) const {
             std::int64_t res = 0;
             for (std::size_t i = count; i > 0; i -= i & -i) {
                 res += tree[i];
@@ -138,7 +140,7 @@ private:
         std::int64_t queued_lots{0};
         std::vector<std::uint64_t> market_seqs{};
         FenwickTree market_qty{};
-        std::unordered_map<std::uint64_t, std::size_t> market_index_by_seq{};
+        lobsim::FlatHashMap<std::uint64_t, std::size_t> market_index_by_seq{};
         FenwickTree paper_qty{};
         std::size_t next_paper_index{0};
     };
@@ -186,11 +188,11 @@ private:
     mutable std::priority_queue<std::int64_t> asks_heap;
     // For O(1) lookup based on order_id (for example for order cancel)
     // For this purpose, we store order_id -> {side, price_ticks, location in queue}
-    std::unordered_map<std::int64_t, OrderInfo> order_info;
-    std::unordered_map<std::int64_t, PaperOrder> paper_orders;
-    std::unordered_map<std::int64_t, PaperOrderInfo> paper_order_info;
-    std::unordered_map<std::int64_t, PaperOrderLevel> paper_bids;
-    std::unordered_map<std::int64_t, PaperOrderLevel> paper_asks;
+    lobsim::FlatHashMap<std::int64_t, OrderInfo> order_info;
+    lobsim::FlatHashMap<std::int64_t, PaperOrder> paper_orders;
+    lobsim::FlatHashMap<std::int64_t, PaperOrderInfo> paper_order_info;
+    ska::flat_hash_map<std::int64_t, PaperOrderLevel> paper_bids;
+    ska::flat_hash_map<std::int64_t, PaperOrderLevel> paper_asks;
     // Pointer to sink for fill registering
     ILogSink* sink = nullptr;
 

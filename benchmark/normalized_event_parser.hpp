@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lobsim/inline.hpp"
 #include "lobsim/lob_event.hpp"
 
 #include <charconv>
@@ -10,7 +11,7 @@
 
 namespace parsing {
 
-inline std::string_view trim(std::string_view value) {
+LOBSIM_FORCEINLINE std::string_view trim(std::string_view value) {
     std::size_t start = 0;
     while (start < value.size() && (value[start] == ' ' || value[start] == '\t' || value[start] == '\r')) {
         ++start;
@@ -22,7 +23,7 @@ inline std::string_view trim(std::string_view value) {
     return value.substr(start, end - start);
 }
 
-inline bool next_field(std::string_view line, std::size_t& pos, std::string_view& out) {
+LOBSIM_FORCEINLINE bool next_field(std::string_view line, std::size_t& pos, std::string_view& out) {
     if (pos >= line.size()) {
         return false;
     }
@@ -38,14 +39,14 @@ inline bool next_field(std::string_view line, std::size_t& pos, std::string_view
     return true;
 }
 
-inline bool parse_int64(std::string_view field, std::int64_t& out) {
+LOBSIM_FORCEINLINE bool parse_int64(std::string_view field, std::int64_t& out) {
     auto first = field.data();
     auto last = field.data() + field.size();
     auto res = std::from_chars(first, last, out);
     return res.ec == std::errc{} && res.ptr == last;
 }
 
-inline bool parse_uint8(std::string_view field, std::uint8_t& out) {
+LOBSIM_FORCEINLINE bool parse_uint8(std::string_view field, std::uint8_t& out) {
     std::int64_t tmp = 0;
     if (!parse_int64(field, tmp)) {
         return false;
@@ -57,7 +58,7 @@ inline bool parse_uint8(std::string_view field, std::uint8_t& out) {
     return true;
 }
 
-inline std::optional<NormalizedLobEvent> parse_normalized_event(std::string_view line) {
+LOBSIM_FORCEINLINE std::optional<NormalizedLobEvent> parse_normalized_event(std::string_view line) {
     std::size_t pos = 0;
     std::string_view field;
 
