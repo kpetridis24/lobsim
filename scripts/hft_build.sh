@@ -4,7 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${root_dir}/build_hft"
 build_type="${BUILD_TYPE:-Release}"
-release_flags="${HFT_CXX_FLAGS_RELEASE:--O3 -DNDEBUG}"
+release_flags="${HFT_CXX_FLAGS_RELEASE:--O3 -DNDEBUG -march=native}"
 
 if [ -f "${build_dir}/CMakeCache.txt" ]; then
   if grep -q "CMAKE_GENERATOR:INTERNAL=Unix Makefiles" "${build_dir}/CMakeCache.txt"; then
