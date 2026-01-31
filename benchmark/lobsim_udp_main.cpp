@@ -196,13 +196,13 @@ int main() {
         ::shutdown(sock, SHUT_RDWR);
     };
 
-    std::jthread shutdown_timer;
+    std::thread shutdown_timer;
     if (shutdown_after) {
         const auto delay = *shutdown_after;
-        shutdown_timer = std::jthread([&, delay](std::stop_token stop_token) {
+        shutdown_timer = std::thread([&, delay] {
             using Clock = std::chrono::steady_clock;
             auto deadline = Clock::now() + delay;
-            while (!stop_token.stop_requested()) {
+            while (!shutdown_requested.load(std::memory_order_relaxed)) {
                 auto now = Clock::now();
                 if (now >= deadline) {
                     break;
@@ -213,7 +213,7 @@ int main() {
                 }
                 std::this_thread::sleep_for(remaining);
             }
-            if (!stop_token.stop_requested()) {
+            if (!shutdown_requested.load(std::memory_order_relaxed)) {
                 request_shutdown();
             }
         });
@@ -333,6 +333,9 @@ int main() {
     input_thread.join();
     processing_thread.join();
     diagnostics_thread.join();
+    if (shutdown_timer.joinable()) {
+        shutdown_timer.join();
+    }
     ::close(sock);
 
     if (metrics_enabled) {
