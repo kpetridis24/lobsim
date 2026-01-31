@@ -75,6 +75,8 @@ enum class DiagnosticRecordCode : std::uint8_t {
     SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK = 28,
     STRATEGY_EVENT_TIME_TRAVEL = 29,
     REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY = 30,
+    HISTORICAL_ORDER_POOL_EXHAUSTED = 31,
+    PAPER_ORDER_POOL_EXHAUSTED = 32,
 };
 
 enum class DiagnosticRecordSeverity : std::uint8_t { INFO = 0, WARNING = 1, ERROR = 2 };

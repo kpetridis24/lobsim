@@ -21,6 +21,7 @@ include(GNUInstallDirs)
 find_package(ZLIB REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 find_package(Parquet CONFIG REQUIRED)
+find_package(Boost REQUIRED)
 
 # ---- Core library: lobsim_core ----
 # List sources explicitly (recommended). Add more files as you implement.
@@ -43,6 +44,7 @@ target_include_directories(lobsim_core
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpp/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    ${Boost_INCLUDE_DIRS}
 )
 
 # Warnings (keep reasonable; adjust later)

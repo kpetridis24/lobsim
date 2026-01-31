@@ -8,6 +8,7 @@
 #include "lobsim/replay_session.hpp"
 #include "lobsim/types.hpp"
 
+#include <memory>
 #include <optional>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -209,7 +210,9 @@ PYBIND11_MODULE(_core, m) {
         .value("SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK", DiagnosticRecordCode::SUBMIT_STRATEGY_EVENT_FOR_UNKNOWN_BOOK)
         .value("STRATEGY_EVENT_TIME_TRAVEL", DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL)
         .value("REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY",
-               DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY);
+               DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY)
+        .value("HISTORICAL_ORDER_POOL_EXHAUSTED", DiagnosticRecordCode::HISTORICAL_ORDER_POOL_EXHAUSTED)
+        .value("PAPER_ORDER_POOL_EXHAUSTED", DiagnosticRecordCode::PAPER_ORDER_POOL_EXHAUSTED);
 
     py::enum_<DiagnosticRecordSeverity>(types, "DiagnosticRecordSeverity")
         .value("INFO", DiagnosticRecordSeverity::INFO)
@@ -280,6 +283,9 @@ PYBIND11_MODULE(_core, m) {
             {static_cast<int>(DiagnosticRecordCode::STRATEGY_EVENT_TIME_TRAVEL), "STRATEGY_EVENT_TIME_TRAVEL"},
             {static_cast<int>(DiagnosticRecordCode::REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY),
              "REQUESTED_REDUCE_PAPER_ORDER_BY_ZERO_QUANTITY"},
+            {static_cast<int>(DiagnosticRecordCode::HISTORICAL_ORDER_POOL_EXHAUSTED),
+             "HISTORICAL_ORDER_POOL_EXHAUSTED"},
+            {static_cast<int>(DiagnosticRecordCode::PAPER_ORDER_POOL_EXHAUSTED), "PAPER_ORDER_POOL_EXHAUSTED"},
         };
     });
 
@@ -540,13 +546,16 @@ PYBIND11_MODULE(_core, m) {
     // Engine bindings
     py::class_<PaperTradingSimulator>(m, "PaperTradingSimulator")
         .def(py::init<>())
+        .def(py::init<std::size_t, std::size_t>(),
+             py::arg("historical_capacity") = OrderPoolConfig{}.historical_capacity,
+             py::arg("paper_capacity") = OrderPoolConfig{}.paper_capacity)
         .def(py::init([](const std::vector<Side>& sides, const std::vector<std::int64_t>& prices,
                          const std::vector<std::int64_t>& quantities, InMemoryLogSink* sink) {
-                 PaperTradingSimulator eng;
+                 auto eng = std::make_unique<PaperTradingSimulator>();
                  if (sink != nullptr) {
-                     eng.set_log_sink(sink);
+                     eng->set_log_sink(sink);
                  }
-                 eng.init_from_l2_snapshot(sides, prices, quantities);
+                 eng->init_from_l2_snapshot(sides, prices, quantities);
                  return eng;
              }),
              py::arg("sides"), py::arg("prices"), py::arg("quantities"), py::arg("sink") = nullptr,
