@@ -3,6 +3,8 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${root_dir}/build_hft"
+build_type="${BUILD_TYPE:-Release}"
+release_flags="${HFT_CXX_FLAGS_RELEASE:--O3 -DNDEBUG}"
 
 if [ -f "${build_dir}/CMakeCache.txt" ]; then
   if grep -q "CMAKE_GENERATOR:INTERNAL=Unix Makefiles" "${build_dir}/CMakeCache.txt"; then
@@ -12,6 +14,8 @@ if [ -f "${build_dir}/CMakeCache.txt" ]; then
 fi
 
 cmake -S "${root_dir}" -B "${build_dir}" -G Ninja \
+  -DCMAKE_BUILD_TYPE="${build_type}" \
+  -DCMAKE_CXX_FLAGS_RELEASE="${release_flags}" \
   -DLOBSIM_BUILD_TESTS=OFF \
   -DLOBSIM_BUILD_PYTHON=OFF
 
