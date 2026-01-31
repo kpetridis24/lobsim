@@ -15,6 +15,7 @@
 - [Quickstart](#quickstart)
 - [Examples](#examples)
 - [Benchmarks](#benchmarks)
+- [Stress testing (HFT)](#stress-testing-hft)
 - [Repository layout](#repository-layout)
 - [License](#license)
 
@@ -343,12 +344,39 @@ Notes:
 - Python defaults to **no sink attached** (so it doesn’t store millions of fills in RAM). Use `--with-sink` only for small runs.
 - C++ uses a lightweight counting sink by default (counts fills/events/diagnostics without storing them).
 
+## Stress testing (HFT)
+LOBSIM includes a small “HFT-style” stress harness to measure throughput and diagnose bottlenecks.
+
+What it provides:
+- `lobsim_event_generator`: UDP generator emitting CSV-formatted `NormalizedLobEvent` rows.
+- `lobsim_udp_engine`: UDP ingest + queue + parse + `PaperTradingSimulator` update loop.
+- `lobsim_memory_replay`: pre-generate events in memory, then replay through the same queue+parse pipeline.
+
+Quick start (defaults: rate=10,000 events/sec, duration=5 sec):
+```bash
+./scripts/hft_build.sh
+./scripts/hft_run_udp.sh
+./scripts/hft_run_mem.sh
+```
+
+Override defaults via environment variables, e.g.:
+```bash
+RATE=200000 DURATION=10 ./scripts/hft_run_udp.sh
+RATE=1000000 DURATION=5 MAX_EVENTS=10000000 MAX_MEM_MB=4096 ./scripts/hft_run_mem.sh
+```
+
+Profiling (gprof inside Docker; output goes to `benchmark/profiles/`):
+```bash
+./scripts/profile_hft_gprof.sh
+```
+
 ## Repository layout
 - `cpp/include/lobsim/` — C++ public headers
 - `cpp/src/` — C++ implementation
 - `cpp/tests/` — C++ unit tests (Catch2)
 - `python/lobsim/` — Python package wrapper + stubs for autocomplete
-- `examples/` — end-to-end examples and benchmarks
+- `benchmark/` — benchmarks + HFT stress harness (`benchmark/profiles/` stores profiling output)
+- `examples/` — end-to-end examples and Streamlit demos
 - `scripts/` — developer workflows
 
 ## License

@@ -1,0 +1,335 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 15.07      0.11     0.11 19901587     0.00     0.00  parsing::parse_int64(std::basic_string_view<char, std::char_traits<char> >, long&)
+ 15.07      0.22     0.11   598265     0.00     0.00  PaperTradingSimulator::on_delete(NormalizedLobEvent const&)
+ 12.33      0.31     0.09 13943314     0.00     0.00  parsing::next_field(std::basic_string_view<char, std::char_traits<char> >, unsigned long&, std::basic_string_view<char, std::char_traits<char> >&)
+ 12.33      0.40     0.09  1993326     0.00     0.00  parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >)
+ 12.33      0.49     0.09  1325029     0.00     0.00  PaperTradingSimulator::on_add(NormalizedLobEvent const&)
+  5.48      0.53     0.04   810395     0.00     0.00  PaperTradingSimulator::best_paper_opposite_price(bool)
+  5.48      0.57     0.04   529341     0.00     0.00  PaperTradingSimulator::init_from_l2_snapshot(std::vector<Side, std::allocator<Side> > const&, std::vector<long, std::allocator<long> > const&, std::vector<long, std::allocator<long> > const&)
+  2.74      0.59     0.02  3981419     0.00     0.00  parsing::parse_uint8(std::basic_string_view<char, std::char_traits<char> >, unsigned char&)
+  2.74      0.61     0.02   524229     0.00     0.00  DiagnosticQueueSink::on_diagnostic(DiagnosticRecord const&)
+  2.74      0.63     0.02    69739     0.00     0.00  PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool)
+  2.74      0.65     0.02                             std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#2}> > >::_M_run()
+  2.74      0.67     0.02                             main::{lambda()#3}::operator()() const
+  1.37      0.68     0.01  2196783     0.00     0.00  PaperTradingSimulator::best_opposite_price(bool, std::unordered_map<long, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > >, std::hash<long>, std::equal_to<long>, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > > > const&, std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >&)
+  1.37      0.69     0.01   810325     0.00     0.00  std::__detail::_Map_base<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true>, true>::operator[](long const&)
+  1.37      0.70     0.01   665371     0.00     0.00  std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*)
+  1.37      0.71     0.01   454669     0.00     0.00  BlockingQueue<DiagnosticRecord>::pop()
+  1.37      0.72     0.01   327701     0.00     0.00  std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >::push(long&&)
+  1.37      0.73     0.01        2     5.00     5.00  std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear()
+  0.00      0.73     0.00  1993013     0.00     0.00  DiagnosticQueueSink::on_event_apply(EventApplyRecord const&)
+  0.00      0.73     0.00  1992471     0.00     0.00  PaperTradingSimulator::update(NormalizedLobEvent const&)
+  0.00      0.73     0.00  1991895     0.00     0.00  std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_dispose()
+  0.00      0.73     0.00  1780842     0.00     0.00  PaperTradingSimulator::find_paper_level(Side, long)
+  0.00      0.73     0.00  1036126     0.00     0.00  DiagnosticQueueSink::on_fill(FillRecord const&)
+  0.00      0.73     0.00   842067     0.00     0.00  PaperTradingSimulator::apply_paper_trade_at_level(Side, long, long, NormalizedLobEvent const&)
+  0.00      0.73     0.00   810570     0.00     0.00  std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long)
+  0.00      0.73     0.00   524539     0.00     0.00  PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity)
+  0.00      0.73     0.00   327563     0.00     0.00  std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long)
+  0.00      0.73     0.00   326699     0.00     0.00  std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*)
+  0.00      0.73     0.00    69729     0.00     0.00  PaperTradingSimulator::on_match(NormalizedLobEvent const&)
+  0.00      0.73     0.00    65593     0.00     0.00  void std::deque<DiagnosticRecord, std::allocator<DiagnosticRecord> >::_M_push_back_aux<DiagnosticRecord const&>(DiagnosticRecord const&)
+  0.00      0.73     0.00        3     0.00     0.00  (anonymous namespace)::read_thread_usage()
+  0.00      0.73     0.00        2     0.00     0.00  std::_Hashtable<long, std::pair<long const, PaperTradingSimulator::PaperOrderLevel>, std::allocator<std::pair<long const, PaperTradingSimulator::PaperOrderLevel> >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear()
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2023 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 2 byte(s) for 1.37% of 0.73 seconds
+
+index % time    self  children    called     name
+                                                 <spontaneous>
+[1]     94.5    0.02    0.67                 main::{lambda()#3}::operator()() const [1]
+                0.00    0.36 1992471/1992471     PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+                0.09    0.22 1993326/1993326     parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+                0.00    0.00       1/3           (anonymous namespace)::read_thread_usage() [42]
+-----------------------------------------------
+                0.00    0.36 1992471/1992471     main::{lambda()#3}::operator()() const [1]
+[2]     49.3    0.00    0.36 1992471         PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+                0.09    0.12 1325029/1325029     PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+                0.11    0.00  598265/598265      PaperTradingSimulator::on_delete(NormalizedLobEvent const&) [6]
+                0.02    0.00   69739/69739       PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.02  524529/524539      PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity) [12]
+                0.00    0.00  128268/665371      std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [17]
+                0.00    0.00 1993013/1993013     DiagnosticQueueSink::on_event_apply(EventApplyRecord const&) [32]
+                0.00    0.00   69729/69729       PaperTradingSimulator::on_match(NormalizedLobEvent const&) [40]
+-----------------------------------------------
+                0.09    0.22 1993326/1993326     main::{lambda()#3}::operator()() const [1]
+[3]     42.5    0.09    0.22 1993326         parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+                0.09    0.00 13943314/13943314     parsing::next_field(std::basic_string_view<char, std::char_traits<char> >, unsigned long&, std::basic_string_view<char, std::char_traits<char> >&) [7]
+                0.09    0.00 15918858/19901587     parsing::parse_int64(std::basic_string_view<char, std::char_traits<char> >, long&) [5]
+                0.02    0.02 3981419/3981419     parsing::parse_uint8(std::basic_string_view<char, std::char_traits<char> >, unsigned char&) [8]
+                0.00    0.00 1991895/1991895     std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_dispose() [33]
+-----------------------------------------------
+                0.09    0.12 1325029/1325029     PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[4]     28.5    0.09    0.12 1325029         PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+                0.04    0.00  810395/810395      PaperTradingSimulator::best_paper_opposite_price(bool) [9]
+                0.04    0.00  529341/529341      PaperTradingSimulator::init_from_l2_snapshot(std::vector<Side, std::allocator<Side> > const&, std::vector<long, std::allocator<long> > const&, std::vector<long, std::allocator<long> > const&) [10]
+                0.01    0.00 2196783/2196783     PaperTradingSimulator::best_opposite_price(bool, std::unordered_map<long, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > >, std::hash<long>, std::equal_to<long>, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > > > const&, std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >&) [15]
+                0.01    0.00  810325/810325      std::__detail::_Map_base<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true>, true>::operator[](long const&) [16]
+                0.01    0.00  327701/327701      std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >::push(long&&) [19]
+                0.01    0.00  529385/665371      std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [17]
+                0.00    0.00 1637513/1780842     PaperTradingSimulator::find_paper_level(Side, long) [34]
+                0.00    0.00 1021160/1036126     DiagnosticQueueSink::on_fill(FillRecord const&) [35]
+                0.00    0.00  827099/842067      PaperTradingSimulator::apply_paper_trade_at_level(Side, long, long, NormalizedLobEvent const&) [36]
+                0.00    0.00  810570/810570      std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long) [37]
+                0.00    0.00  326579/326699      std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [39]
+-----------------------------------------------
+                0.02    0.00 3982729/19901587     parsing::parse_uint8(std::basic_string_view<char, std::char_traits<char> >, unsigned char&) [8]
+                0.09    0.00 15918858/19901587     parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+[5]     15.1    0.11    0.00 19901587         parsing::parse_int64(std::basic_string_view<char, std::char_traits<char> >, long&) [5]
+-----------------------------------------------
+                0.11    0.00  598265/598265      PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[6]     15.1    0.11    0.00  598265         PaperTradingSimulator::on_delete(NormalizedLobEvent const&) [6]
+                0.00    0.00  128374/1780842     PaperTradingSimulator::find_paper_level(Side, long) [34]
+                0.00    0.00     111/326699      std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [39]
+-----------------------------------------------
+                0.09    0.00 13943314/13943314     parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+[7]     12.3    0.09    0.00 13943314         parsing::next_field(std::basic_string_view<char, std::char_traits<char> >, unsigned long&, std::basic_string_view<char, std::char_traits<char> >&) [7]
+-----------------------------------------------
+                0.02    0.02 3981419/3981419     parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+[8]      5.8    0.02    0.02 3981419         parsing::parse_uint8(std::basic_string_view<char, std::char_traits<char> >, unsigned char&) [8]
+                0.02    0.00 3982729/19901587     parsing::parse_int64(std::basic_string_view<char, std::char_traits<char> >, long&) [5]
+-----------------------------------------------
+                0.04    0.00  810395/810395      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[9]      5.5    0.04    0.00  810395         PaperTradingSimulator::best_paper_opposite_price(bool) [9]
+-----------------------------------------------
+                0.04    0.00  529341/529341      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[10]     5.5    0.04    0.00  529341         PaperTradingSimulator::init_from_l2_snapshot(std::vector<Side, std::allocator<Side> > const&, std::vector<long, std::allocator<long> > const&, std::vector<long, std::allocator<long> > const&) [10]
+-----------------------------------------------
+                0.02    0.00   69739/69739       PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[11]     2.8    0.02    0.00   69739         PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00    7718/665371      std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [17]
+                0.00    0.00      10/524539      PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity) [12]
+                0.00    0.00   14968/842067      PaperTradingSimulator::apply_paper_trade_at_level(Side, long, long, NormalizedLobEvent const&) [36]
+                0.00    0.00   14966/1036126     DiagnosticQueueSink::on_fill(FillRecord const&) [35]
+                0.00    0.00   14955/1780842     PaperTradingSimulator::find_paper_level(Side, long) [34]
+                0.00    0.00       9/326699      std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [39]
+-----------------------------------------------
+                0.00    0.00      10/524539      PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.02  524529/524539      PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[12]     2.7    0.00    0.02  524539         PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity) [12]
+                0.02    0.00  524229/524229      DiagnosticQueueSink::on_diagnostic(DiagnosticRecord const&) [13]
+-----------------------------------------------
+                0.02    0.00  524229/524229      PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity) [12]
+[13]     2.7    0.02    0.00  524229         DiagnosticQueueSink::on_diagnostic(DiagnosticRecord const&) [13]
+                0.00    0.00   65593/65593       void std::deque<DiagnosticRecord, std::allocator<DiagnosticRecord> >::_M_push_back_aux<DiagnosticRecord const&>(DiagnosticRecord const&) [41]
+-----------------------------------------------
+                                                 <spontaneous>
+[14]     2.7    0.02    0.00                 std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#2}> > >::_M_run() [14]
+                0.00    0.00       1/3           (anonymous namespace)::read_thread_usage() [42]
+-----------------------------------------------
+                0.01    0.00 2196783/2196783     PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[15]     1.4    0.01    0.00 2196783         PaperTradingSimulator::best_opposite_price(bool, std::unordered_map<long, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > >, std::hash<long>, std::equal_to<long>, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > > > const&, std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >&) [15]
+-----------------------------------------------
+                0.01    0.00  810325/810325      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[16]     1.4    0.01    0.00  810325         std::__detail::_Map_base<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true>, true>::operator[](long const&) [16]
+                0.00    0.00  327563/327563      std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long) [38]
+-----------------------------------------------
+                0.00    0.00    7718/665371      PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00  128268/665371      PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+                0.01    0.00  529385/665371      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[17]     1.4    0.01    0.00  665371         std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [17]
+-----------------------------------------------
+                0.01    0.00  454669/454669      std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#4}> > >::_M_run() [22]
+[18]     1.4    0.01    0.00  454669         BlockingQueue<DiagnosticRecord>::pop() [18]
+-----------------------------------------------
+                0.01    0.00  327701/327701      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[19]     1.4    0.01    0.00  327701         std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >::push(long&&) [19]
+-----------------------------------------------
+                0.01    0.00       2/2           PaperTradingSimulator::~PaperTradingSimulator() [21]
+[20]     1.4    0.01    0.00       2         std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear() [20]
+-----------------------------------------------
+                                                 <spontaneous>
+[21]     1.4    0.00    0.01                 PaperTradingSimulator::~PaperTradingSimulator() [21]
+                0.01    0.00       2/2           std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear() [20]
+                0.00    0.00       2/2           std::_Hashtable<long, std::pair<long const, PaperTradingSimulator::PaperOrderLevel>, std::allocator<std::pair<long const, PaperTradingSimulator::PaperOrderLevel> >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear() [43]
+-----------------------------------------------
+                                                 <spontaneous>
+[22]     1.4    0.00    0.01                 std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#4}> > >::_M_run() [22]
+                0.01    0.00  454669/454669      BlockingQueue<DiagnosticRecord>::pop() [18]
+                0.00    0.00       1/3           (anonymous namespace)::read_thread_usage() [42]
+-----------------------------------------------
+                0.00    0.00 1993013/1993013     PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[32]     0.0    0.00    0.00 1993013         DiagnosticQueueSink::on_event_apply(EventApplyRecord const&) [32]
+-----------------------------------------------
+                0.00    0.00 1991895/1991895     parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [3]
+[33]     0.0    0.00    0.00 1991895         std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_dispose() [33]
+-----------------------------------------------
+                0.00    0.00   14955/1780842     PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00  128374/1780842     PaperTradingSimulator::on_delete(NormalizedLobEvent const&) [6]
+                0.00    0.00 1637513/1780842     PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[34]     0.0    0.00    0.00 1780842         PaperTradingSimulator::find_paper_level(Side, long) [34]
+-----------------------------------------------
+                0.00    0.00   14966/1036126     PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00 1021160/1036126     PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[35]     0.0    0.00    0.00 1036126         DiagnosticQueueSink::on_fill(FillRecord const&) [35]
+-----------------------------------------------
+                0.00    0.00   14968/842067      PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00  827099/842067      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[36]     0.0    0.00    0.00  842067         PaperTradingSimulator::apply_paper_trade_at_level(Side, long, long, NormalizedLobEvent const&) [36]
+-----------------------------------------------
+                0.00    0.00  810570/810570      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[37]     0.0    0.00    0.00  810570         std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long) [37]
+-----------------------------------------------
+                0.00    0.00  327563/327563      std::__detail::_Map_base<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true>, true>::operator[](long const&) [16]
+[38]     0.0    0.00    0.00  327563         std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long) [38]
+-----------------------------------------------
+                0.00    0.00       9/326699      PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [11]
+                0.00    0.00     111/326699      PaperTradingSimulator::on_delete(NormalizedLobEvent const&) [6]
+                0.00    0.00  326579/326699      PaperTradingSimulator::on_add(NormalizedLobEvent const&) [4]
+[39]     0.0    0.00    0.00  326699         std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*) [39]
+-----------------------------------------------
+                0.00    0.00   69729/69729       PaperTradingSimulator::update(NormalizedLobEvent const&) [2]
+[40]     0.0    0.00    0.00   69729         PaperTradingSimulator::on_match(NormalizedLobEvent const&) [40]
+-----------------------------------------------
+                0.00    0.00   65593/65593       DiagnosticQueueSink::on_diagnostic(DiagnosticRecord const&) [13]
+[41]     0.0    0.00    0.00   65593         void std::deque<DiagnosticRecord, std::allocator<DiagnosticRecord> >::_M_push_back_aux<DiagnosticRecord const&>(DiagnosticRecord const&) [41]
+-----------------------------------------------
+                0.00    0.00       1/3           std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#4}> > >::_M_run() [22]
+                0.00    0.00       1/3           std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#2}> > >::_M_run() [14]
+                0.00    0.00       1/3           main::{lambda()#3}::operator()() const [1]
+[42]     0.0    0.00    0.00       3         (anonymous namespace)::read_thread_usage() [42]
+-----------------------------------------------
+                0.00    0.00       2/2           PaperTradingSimulator::~PaperTradingSimulator() [21]
+[43]     0.0    0.00    0.00       2         std::_Hashtable<long, std::pair<long const, PaperTradingSimulator::PaperOrderLevel>, std::allocator<std::pair<long const, PaperTradingSimulator::PaperOrderLevel> >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear() [43]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2023 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+  [42] (anonymous namespace)::read_thread_usage() (lobsim_udp_main.cpp) [36] PaperTradingSimulator::apply_paper_trade_at_level(Side, long, long, NormalizedLobEvent const&) [20] std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear()
+  [18] BlockingQueue<DiagnosticRecord>::pop() [4] PaperTradingSimulator::on_add(NormalizedLobEvent const&) [39] std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*)
+  [13] DiagnosticQueueSink::on_diagnostic(DiagnosticRecord const&) [2] PaperTradingSimulator::update(NormalizedLobEvent const&) [37] std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long)
+  [32] DiagnosticQueueSink::on_event_apply(EventApplyRecord const&) [40] PaperTradingSimulator::on_match(NormalizedLobEvent const&) [17] std::_Hashtable<long, std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_erase(unsigned long, std::__detail::_Hash_node_base*, std::__detail::_Hash_node<std::pair<long const, std::tuple<Side, long, std::_List_iterator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*)
+  [35] DiagnosticQueueSink::on_fill(FillRecord const&) [6] PaperTradingSimulator::on_delete(NormalizedLobEvent const&) [19] std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >::push(long&&)
+  [12] PaperTradingSimulator::emit_diagnostic(NormalizedLobEvent const&, DiagnosticRecordCode, DiagnosticRecordSeverity) [7] parsing::next_field(std::basic_string_view<char, std::char_traits<char> >, unsigned long&, std::basic_string_view<char, std::char_traits<char> >&) [41] void std::deque<DiagnosticRecord, std::allocator<DiagnosticRecord> >::_M_push_back_aux<DiagnosticRecord const&>(DiagnosticRecord const&)
+  [34] PaperTradingSimulator::find_paper_level(Side, long) [5] parsing::parse_int64(std::basic_string_view<char, std::char_traits<char> >, long&) [14] std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::{lambda()#2}> > >::_M_run() (std_thread.h)
+  [15] PaperTradingSimulator::best_opposite_price(bool, std::unordered_map<long, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > >, std::hash<long>, std::equal_to<long>, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > > > const&, std::priority_queue<long, std::vector<long, std::allocator<long> >, std::less<long> >&) [8] parsing::parse_uint8(std::basic_string_view<char, std::char_traits<char> >, unsigned char&) [33] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_dispose()
+  [10] PaperTradingSimulator::init_from_l2_snapshot(std::vector<Side, std::allocator<Side> > const&, std::vector<long, std::allocator<long> > const&, std::vector<long, std::allocator<long> > const&) [3] parsing::parse_normalized_event(std::basic_string_view<char, std::char_traits<char> >) [16] std::__detail::_Map_base<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true>, true>::operator[](long const&)
+  [11] PaperTradingSimulator::on_partial_order_cancel(NormalizedLobEvent const&, bool) [43] std::_Hashtable<long, std::pair<long const, PaperTradingSimulator::PaperOrderLevel>, std::allocator<std::pair<long const, PaperTradingSimulator::PaperOrderLevel> >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::clear() [1] main::{lambda()#3}::operator()() const (lobsim_udp_main.cpp)
+   [9] PaperTradingSimulator::best_paper_opposite_price(bool) [38] std::_Hashtable<long, std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, std::allocator<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > > >, std::__detail::_Select1st, std::equal_to<long>, std::hash<long>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_M_insert_unique_node(unsigned long, unsigned long, std::__detail::_Hash_node<std::pair<long const, std::__cxx11::list<std::tuple<long, long, long, UpdateSource, unsigned long>, std::allocator<std::tuple<long, long, long, UpdateSource, unsigned long> > > >, false>*, unsigned long)
