@@ -264,7 +264,9 @@ def call_claude_api(prompt: str, retries: int = MAX_RETRIES) -> dict[str, Any]:
             )
 
             # Extract text content
-            text = response.content[0].text
+            text = ""
+            if response.content and hasattr(response.content[0], 'text'):
+                text = response.content[0].text
 
             # Parse JSON response (handle markdown code blocks if present)
             if text.startswith("```"):
@@ -362,7 +364,7 @@ def post_review_to_github(
 
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
 
-    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
 
     if response.status_code == 201:
         print(f"Review posted successfully: {response.json().get('html_url')}")
@@ -387,7 +389,7 @@ def main() -> None:
         print("No reviewable files changed")
         sys.exit(0)
 
-    changed_files = [f.strip() for f in files_path.read_text().split("\n") if f.strip()]
+    changed_files = [f for f in files_path.read_text().splitlines() if f.strip()]
 
     # Parse diff
     file_diffs = parse_unified_diff(diff_text)

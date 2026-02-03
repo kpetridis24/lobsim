@@ -5,6 +5,7 @@
 #include "lobsim/log_sink.hpp"
 
 #include <boost/intrusive/list.hpp>
+#include <numeric>
 
 enum class PaperOrderStatus : std::uint8_t {
     OPEN = 0,
@@ -37,7 +38,7 @@ public:
         free_list_.reserve(capacity);
     }
 
-    NodeType* acquire(std::size_t max_capacity) {
+    LOBSIM_FORCEINLINE NodeType* acquire(std::size_t max_capacity) {
         if (!free_list_.empty()) {
             const auto idx = free_list_.back();
             free_list_.pop_back();
@@ -58,12 +59,15 @@ public:
     }
 
     void release(NodeType* node) {
-        if (node == nullptr)
+        if (node == nullptr) {
             return;
-        if (node->hook.is_linked())
+        }
+        if (node->hook.is_linked()) {
             node->hook.unlink();
-        if (!node->in_use)
+        }
+        if (!node->in_use) {
             return;
+        }
         node->in_use = false;
         free_list_.push_back(node->pool_index);
     }
@@ -76,9 +80,7 @@ public:
         }
         free_list_.clear();
         free_list_.reserve(pool_.size());
-        for (std::size_t i = 0; i < pool_.size(); ++i) {
-            free_list_.push_back(i);
-        }
+        std::iota(free_list_.begin(), free_list_.end(), 0);
     }
 
     std::size_t size() const { return pool_.size(); }
