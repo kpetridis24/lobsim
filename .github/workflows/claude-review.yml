@@ -1,0 +1,70 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master]
+
+# Prevent concurrent reviews on the same PR
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  claude-review:
+    name: AI Code Review
+    runs-on: macos-14
+    # Skip if PR is from a fork (no access to secrets)
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install anthropic requests
+
+      - name: Get PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the diff between base and head
+          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.patch
+
+          # Get list of changed files (filtered to code files)
+          gh pr diff ${{ github.event.pull_request.number }} --name-only | \
+            grep -E '\.(cpp|hpp|h|cc|c|py)$' | \
+            grep -v '^build/' | \
+            grep -v '^venv/' | \
+            grep -v '__pycache__' > changed_files.txt || true
+
+          echo "files_count=$(wc -l < changed_files.txt | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Run Claude review
+        if: steps.diff.outputs.files_count != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_FULL_NAME: ${{ github.repository }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/claude_review.py
+
+      - name: Skip notification
+        if: steps.diff.outputs.files_count == '0'
+        run: echo "No reviewable files changed, skipping Claude review"
