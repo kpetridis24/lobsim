@@ -79,7 +79,7 @@ public:
             node.in_use = false;
         }
         free_list_.clear();
-        free_list_.reserve(pool_.size());
+        free_list_.resize(pool_.size());
         std::iota(free_list_.begin(), free_list_.end(), 0);
     }
 
