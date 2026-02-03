@@ -5,6 +5,7 @@
 #include "lobsim/log_sink.hpp"
 
 #include <boost/intrusive/list.hpp>
+#include <numeric>
 
 enum class PaperOrderStatus : std::uint8_t {
     OPEN = 0,
@@ -26,6 +27,67 @@ public:
 struct OrderPoolConfig {
     std::size_t historical_capacity{200000};
     std::size_t paper_capacity{100000};
+};
+
+template <typename NodeType> class NodePool {
+public:
+    NodePool() = default;
+
+    void reserve(std::size_t capacity) {
+        pool_.reserve(capacity);
+        free_list_.reserve(capacity);
+    }
+
+    LOBSIM_FORCEINLINE NodeType* acquire(std::size_t max_capacity) {
+        if (!free_list_.empty()) {
+            const auto idx = free_list_.back();
+            free_list_.pop_back();
+            auto& node = pool_[idx];
+            node.hook.unlink();
+            node.in_use = true;
+            return &node;
+        }
+        if (pool_.size() >= max_capacity) {
+            return nullptr;
+        }
+        const auto idx = pool_.size();
+        pool_.emplace_back();
+        auto& node = pool_.back();
+        node.pool_index = idx;
+        node.in_use = true;
+        return &node;
+    }
+
+    void release(NodeType* node) {
+        if (node == nullptr) {
+            return;
+        }
+        if (node->hook.is_linked()) {
+            node->hook.unlink();
+        }
+        if (!node->in_use) {
+            return;
+        }
+        node->in_use = false;
+        free_list_.push_back(node->pool_index);
+    }
+
+    void reset() {
+        for (auto& node : pool_) {
+            if (node.hook.is_linked())
+                node.hook.unlink();
+            node.in_use = false;
+        }
+        free_list_.clear();
+        free_list_.resize(pool_.size());
+        std::iota(free_list_.begin(), free_list_.end(), 0);
+    }
+
+    std::size_t size() const { return pool_.size(); }
+
+private:
+    std::vector<NodeType> pool_;
+    std::vector<std::size_t> free_list_;
 };
 
 class PaperTradingSimulator final : public IMatchingEngine {
@@ -173,10 +235,6 @@ private:
     void clear_state();
     void init_pools();
     void reset_pools();
-    OrderNode* acquire_order_node();
-    void release_order_node(OrderNode* node);
-    PaperOrderNode* acquire_paper_node();
-    void release_paper_node(PaperOrderNode* node);
 
     std::uint64_t seq = 0;
     std::uint64_t order_arrival_seq = 0;
@@ -197,8 +255,6 @@ private:
     ILogSink* sink = nullptr;
 
     OrderPoolConfig pool_config_{};
-    std::vector<OrderNode> order_pool{};
-    std::vector<std::size_t> order_free{};
-    std::vector<PaperOrderNode> paper_pool{};
-    std::vector<std::size_t> paper_free{};
+    NodePool<OrderNode> order_pool_{};
+    NodePool<PaperOrderNode> paper_pool_{};
 };

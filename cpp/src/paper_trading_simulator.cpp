@@ -36,100 +36,13 @@ PaperTradingSimulator::PaperTradingSimulator(std::vector<Side>& sides, std::vect
 }
 
 void PaperTradingSimulator::init_pools() {
-    order_pool.reserve(pool_config_.historical_capacity);
-    order_free.reserve(pool_config_.historical_capacity);
-    paper_pool.reserve(pool_config_.paper_capacity);
-    paper_free.reserve(pool_config_.paper_capacity);
+    order_pool_.reserve(pool_config_.historical_capacity);
+    paper_pool_.reserve(pool_config_.paper_capacity);
 }
 
 void PaperTradingSimulator::reset_pools() {
-    for (auto& node : order_pool) {
-        node.hook.unlink();
-        node.in_use = false;
-    }
-    order_free.clear();
-    order_free.reserve(order_pool.size());
-    for (std::size_t i = 0; i < order_pool.size(); ++i) {
-        order_free.push_back(i);
-    }
-
-    for (auto& node : paper_pool) {
-        node.hook.unlink();
-        node.in_use = false;
-    }
-    paper_free.clear();
-    paper_free.reserve(paper_pool.size());
-    for (std::size_t i = 0; i < paper_pool.size(); ++i) {
-        paper_free.push_back(i);
-    }
-}
-
-PaperTradingSimulator::OrderNode* PaperTradingSimulator::acquire_order_node() {
-    if (!order_free.empty()) {
-        const auto idx = order_free.back();
-        order_free.pop_back();
-        auto& node = order_pool[idx];
-        node.hook.unlink();
-        node.in_use = true;
-        return &node;
-    }
-    if (order_pool.size() >= pool_config_.historical_capacity) {
-        return nullptr;
-    }
-    const auto idx = order_pool.size();
-    order_pool.emplace_back();
-    auto& node = order_pool.back();
-    node.pool_index = idx;
-    node.in_use = true;
-    return &node;
-}
-
-void PaperTradingSimulator::release_order_node(OrderNode* node) {
-    if (node == nullptr) {
-        return;
-    }
-    if (node->hook.is_linked()) {
-        node->hook.unlink();
-    }
-    if (!node->in_use) {
-        return;
-    }
-    node->in_use = false;
-    order_free.push_back(node->pool_index);
-}
-
-PaperTradingSimulator::PaperOrderNode* PaperTradingSimulator::acquire_paper_node() {
-    if (!paper_free.empty()) {
-        const auto idx = paper_free.back();
-        paper_free.pop_back();
-        auto& node = paper_pool[idx];
-        node.hook.unlink();
-        node.in_use = true;
-        return &node;
-    }
-    if (paper_pool.size() >= pool_config_.paper_capacity) {
-        return nullptr;
-    }
-    const auto idx = paper_pool.size();
-    paper_pool.emplace_back();
-    auto& node = paper_pool.back();
-    node.pool_index = idx;
-    node.in_use = true;
-    return &node;
-}
-
-void PaperTradingSimulator::release_paper_node(PaperOrderNode* node) {
-    if (node == nullptr) {
-        return;
-    }
-    if (node->hook.is_linked()) {
-        node->hook.unlink();
-    }
-    if (!node->in_use) {
-        return;
-    }
-    node->in_use = false;
-    paper_free.push_back(node->pool_index);
+    order_pool_.reset();
+    paper_pool_.reset();
 }
 
 void PaperTradingSimulator::update(const NormalizedLobEvent& event) {
@@ -281,7 +194,7 @@ void PaperTradingSimulator::on_add(const NormalizedLobEvent& event) {
                     if (makerQty <= 0) {
                         order_info.erase(maker_order_id);
                         itNode = levelList.erase(itNode);
-                        release_order_node(node_ptr);
+                        order_pool_.release(node_ptr);
                         continue;
                     }
 
@@ -304,7 +217,7 @@ void PaperTradingSimulator::on_add(const NormalizedLobEvent& event) {
                     if (makerQty == 0) {
                         order_info.erase(maker_order_id);
                         itNode = levelList.erase(itNode);
-                        release_order_node(node_ptr);
+                        order_pool_.release(node_ptr);
                     } else {
                         ++itNode;
                     }
@@ -354,7 +267,7 @@ void PaperTradingSimulator::on_add(const NormalizedLobEvent& event) {
 
     if (remaining > 0) {
         if (paper) {
-            auto* paper_node = acquire_paper_node();
+            auto* paper_node = paper_pool_.acquire(pool_config_.paper_capacity);
             if (!paper_node) {
                 emit_diagnostic(event, DiagnosticRecordCode::PAPER_ORDER_POOL_EXHAUSTED,
                                 DiagnosticRecordSeverity::ERROR);
@@ -377,7 +290,7 @@ void PaperTradingSimulator::on_add(const NormalizedLobEvent& event) {
             paper_order_info.emplace(event.order_id, PaperOrderInfo{event.side, event.price_ticks, paper_node});
             level.queued_lots += remaining;
         } else {
-            auto* node = acquire_order_node();
+            auto* node = order_pool_.acquire(pool_config_.historical_capacity);
             if (!node) {
                 emit_diagnostic(event, DiagnosticRecordCode::HISTORICAL_ORDER_POOL_EXHAUSTED,
                                 DiagnosticRecordSeverity::ERROR);
@@ -605,7 +518,7 @@ void PaperTradingSimulator::apply_paper_trade_at_level(Side passive_side, std::i
         if (orderIt == paper_orders.end()) {
             it = level.orders.erase(it);
             paper_order_info.erase(order_id);
-            release_paper_node(node);
+            paper_pool_.release(node);
             continue;
         }
 
@@ -626,7 +539,7 @@ void PaperTradingSimulator::apply_paper_trade_at_level(Side passive_side, std::i
             level.orders.erase(it);
             paper_order_info.erase(order_id);
             paper_orders.erase(orderIt);
-            release_paper_node(node);
+            paper_pool_.release(node);
             it = next;
             continue;
         }
@@ -691,7 +604,7 @@ std::int64_t PaperTradingSimulator::trade_against_paper_level(Side passive_side,
             auto next = std::next(it);
             level.orders.erase(it);
             paper_order_info.erase(order_id);
-            release_paper_node(node);
+            paper_pool_.release(node);
             it = next;
             continue;
         }
@@ -702,7 +615,7 @@ std::int64_t PaperTradingSimulator::trade_against_paper_level(Side passive_side,
             level.orders.erase(it);
             paper_order_info.erase(order_id);
             paper_orders.erase(orderIt);
-            release_paper_node(node);
+            paper_pool_.release(node);
             it = next;
             continue;
         }
@@ -751,7 +664,7 @@ void PaperTradingSimulator::remove_paper_order(PaperOrderLevel& level, PaperOrde
             level.orders.erase(level.orders.iterator_to(*node));
         }
         paper_order_info.erase(order_id);
-        release_paper_node(node);
+        paper_pool_.release(node);
         return;
     }
 
@@ -765,7 +678,7 @@ void PaperTradingSimulator::remove_paper_order(PaperOrderLevel& level, PaperOrde
         }
         paper_order_info.erase(order_id);
         paper_orders.erase(orderIt);
-        release_paper_node(node);
+        paper_pool_.release(node);
         return;
     }
     removed_qty = std::min(removed_qty, order.remaining_qty);
@@ -780,7 +693,7 @@ void PaperTradingSimulator::remove_paper_order(PaperOrderLevel& level, PaperOrde
     }
     paper_order_info.erase(order_id);
     paper_orders.erase(orderIt);
-    release_paper_node(node);
+    paper_pool_.release(node);
 }
 
 void PaperTradingSimulator::reduce_paper_order(const NormalizedLobEvent& event) {
@@ -805,7 +718,7 @@ void PaperTradingSimulator::reduce_paper_order(const NormalizedLobEvent& event) 
     auto* node = infoIt->second.node;
     auto level = find_paper_level(storedSide, storedPriceTicks);
     if (!level) {
-        release_paper_node(node);
+        paper_pool_.release(node);
         paper_order_info.erase(infoIt);
         paper_orders.erase(event.order_id);
         return;
@@ -816,7 +729,7 @@ void PaperTradingSimulator::reduce_paper_order(const NormalizedLobEvent& event) 
         if (node && node->hook.is_linked()) {
             level->orders.erase(level->orders.iterator_to(*node));
         }
-        release_paper_node(node);
+        paper_pool_.release(node);
         paper_order_info.erase(infoIt);
         return;
     }
@@ -856,7 +769,7 @@ void PaperTradingSimulator::set_paper_order(std::int64_t order_id, std::int64_t 
     auto* node = infoIt->second.node;
     auto level = find_paper_level(storedSide, storedPriceTicks);
     if (!level) {
-        release_paper_node(node);
+        paper_pool_.release(node);
         paper_order_info.erase(infoIt);
         paper_orders.erase(order_id);
         return;
@@ -867,7 +780,7 @@ void PaperTradingSimulator::set_paper_order(std::int64_t order_id, std::int64_t 
         if (node && node->hook.is_linked()) {
             level->orders.erase(level->orders.iterator_to(*node));
         }
-        release_paper_node(node);
+        paper_pool_.release(node);
         paper_order_info.erase(infoIt);
         return;
     }
@@ -913,7 +826,7 @@ void PaperTradingSimulator::on_delete(const NormalizedLobEvent& event) {
         auto* node = it->second.node;
         auto level = find_paper_level(storedSide, storedPriceTicks);
         if (!level) {
-            release_paper_node(node);
+            paper_pool_.release(node);
             paper_order_info.erase(it);
             paper_orders.erase(event.order_id);
             return;
@@ -924,7 +837,7 @@ void PaperTradingSimulator::on_delete(const NormalizedLobEvent& event) {
             if (node && node->hook.is_linked()) {
                 level->orders.erase(level->orders.iterator_to(*node));
             }
-            release_paper_node(node);
+            paper_pool_.release(node);
             paper_order_info.erase(it);
             return;
         }
@@ -990,7 +903,7 @@ void PaperTradingSimulator::on_delete(const NormalizedLobEvent& event) {
     if (node->hook.is_linked()) {
         queue.erase(queue.iterator_to(*node));
     }
-    release_order_node(node);
+    order_pool_.release(node);
 
     if (queue.empty()) {
         book.erase(bIt);
@@ -1074,7 +987,7 @@ void PaperTradingSimulator::on_set(const NormalizedLobEvent& event) {
         if (node->hook.is_linked()) {
             queue.erase(queue.iterator_to(*node));
         }
-        release_order_node(node);
+        order_pool_.release(node);
         if (queue.empty()) {
             book.erase(bIt);
         }
@@ -1177,7 +1090,7 @@ void PaperTradingSimulator::on_partial_order_cancel(const NormalizedLobEvent& ev
         if (node->hook.is_linked()) {
             queue.erase(queue.iterator_to(*node));
         }
-        release_order_node(node);
+        order_pool_.release(node);
         if (queue.empty()) {
             book.erase(bIt);
         }
@@ -1215,7 +1128,7 @@ void PaperTradingSimulator::init_from_l2_snapshot(const std::vector<Side>& sides
             throw std::runtime_error("Duplicate price found. Initializing from L2 snapshot requires volumes to be "
                                      "aggregated per price-level.");
         }
-        auto* node = acquire_order_node();
+        auto* node = order_pool_.acquire(pool_config_.historical_capacity);
         if (!node) {
             NormalizedLobEvent diag_event{};
             diag_event.side = side;
@@ -1271,7 +1184,7 @@ void PaperTradingSimulator::init_from_l3_snapshot(const std::vector<Side>& sides
         auto& priorityQueue = book[price];
         const bool newLevel = priorityQueue.empty();
 
-        auto* node = acquire_order_node();
+        auto* node = order_pool_.acquire(pool_config_.historical_capacity);
         if (!node) {
             NormalizedLobEvent diag_event{};
             diag_event.side = side;
